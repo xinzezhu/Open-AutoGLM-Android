@@ -1,5 +1,7 @@
 # Open-AutoGLM-Android
 
+[English](README_EN.md) | 中文
+
 基于 Android 无障碍服务的智能手机自动化助手，使用 AutoGLM 视觉语言模型实现自然语言指令的手机操作。
 
 ## 功能特点
@@ -139,7 +141,7 @@ cd Open-AutoGLM-Android
 
 ## 致谢
 
-- 感谢 [Open-AutoGLM](https://github.com/THUDM/Open-AutoGLM) 项目提供的灵感
+- 感谢 [Open-AutoGLM](https://github.com/zai-org/Open-AutoGLM) 项目提供的灵感
 - 感谢智谱 AI 提供的 AutoGLM 模型
 
 ## 支持作者
@@ -149,7 +151,10 @@ cd Open-AutoGLM-Android
 ![Pay](pay.jpg)
 
 ## 交流群
+
 qq交流群：734202636
+
+
 ---
 
 **注意**：本项目仅供学习和研究使用。使用本应用时，请遵守相关法律法规和平台使用条款。
