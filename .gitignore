@@ -13,3 +13,14 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Keystore files
+*.jks
+*.keystore
+
+# Release APK files (should be uploaded via GitHub Releases)
+app/release/
+*.apk
+
+# Kotlin build cache
+.kotlin/

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -18,6 +20,32 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            // 读取签名配置（从 local.properties）
+            val keystorePropertiesFile = rootProject.file("local.properties")
+            if (keystorePropertiesFile.exists()) {
+                val props = Properties()
+                keystorePropertiesFile.reader().use {
+                    props.load(it)
+                }
+                
+                val keystorePath = props.getProperty("keystore.path")
+                val keystorePassword = props.getProperty("keystore.password")
+                val keyAliasName = props.getProperty("key.alias")
+                val keyPassword = props.getProperty("key.password")
+                
+                if (!keystorePath.isNullOrBlank() && !keystorePassword.isNullOrBlank() 
+                    && !keyAliasName.isNullOrBlank() && !keyPassword.isNullOrBlank()) {
+                    storeFile = file(keystorePath)
+                    storePassword = keystorePassword
+                    keyAlias = keyAliasName
+                    this.keyPassword = keyPassword
+                }
+            }
+        }
+    }
+    
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -25,6 +53,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // 只有在签名配置存在时才使用
+            if (signingConfigs.findByName("release")?.storeFile?.exists() == true) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {
