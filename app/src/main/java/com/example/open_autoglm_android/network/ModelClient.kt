@@ -94,10 +94,10 @@ class ModelClient(
      */
     fun createUserMessage(userPrompt: String, screenshot: Bitmap?, currentApp: String?): ChatMessage {
         val userContent = mutableListOf<ContentItem>()
-        val screenInfo = buildScreenInfo(currentApp)
-        val textContent = "$userPrompt\n\n$screenInfo"
-        userContent.add(ContentItem(type = "text", text = textContent))
-        
+        val screenInfoJson = buildScreenInfo(currentApp)
+        val textContent = "$userPrompt\n\n$screenInfoJson"
+
+        // 对齐旧项目：先放图片，再放文本
         screenshot?.let { bitmap ->
             val base64Image = bitmapToBase64(bitmap)
             userContent.add(
@@ -107,7 +107,9 @@ class ModelClient(
                 )
             )
         }
-        
+
+        userContent.add(ContentItem(type = "text", text = textContent))
+
         return ChatMessage(role = "user", content = userContent)
     }
     
@@ -116,10 +118,10 @@ class ModelClient(
      */
     fun createScreenInfoMessage(screenshot: Bitmap?, currentApp: String?): ChatMessage {
         val userContent = mutableListOf<ContentItem>()
-        val screenInfo = buildScreenInfo(currentApp)
-        val textContent = "** Screen Info **\n\n$screenInfo"
-        userContent.add(ContentItem(type = "text", text = textContent))
-        
+        val screenInfoJson = buildScreenInfo(currentApp)
+        val textContent = "** Screen Info **\n\n$screenInfoJson"
+
+        // 对齐旧项目：先放图片，再放文本
         screenshot?.let { bitmap ->
             val base64Image = bitmapToBase64(bitmap)
             userContent.add(
@@ -129,7 +131,9 @@ class ModelClient(
                 )
             )
         }
-        
+
+        userContent.add(ContentItem(type = "text", text = textContent))
+
         return ChatMessage(role = "user", content = userContent)
     }
     
@@ -145,14 +149,12 @@ class ModelClient(
     }
     
     /**
-     * 构建屏幕信息
+     * 构建屏幕信息（与旧项目保持一致，返回 JSON 字符串，如 {"current_app": "System Home"}）
      */
     private fun buildScreenInfo(currentApp: String?): String {
-        return if (currentApp != null) {
-            "当前应用: $currentApp"
-        } else {
-            "当前应用: 未知"
-        }
+        val appName = currentApp ?: "Unknown"
+        // 简单 JSON，字段名与旧项目保持一致
+        return """{"current_app": "$appName"}"""
     }
     
     /**
@@ -223,7 +225,7 @@ class ModelClient(
     finish是结束任务的操作，表示准确完整完成任务，message是终止信息。 
 
 必须遵循的规则：
-1. 在执行任何操作前，先检查当前app是否是目标app，如果不是，先执行 Launch。
+1. 在执行任何操作前，先检查当前app是否是目标app，如果不是，先执行 Launch，不要执行其他操作（如Home,Back等）。
 2. 如果进入到了无关页面，先执行 Back。如果执行Back后页面没有变化，请点击页面左上角的返回键进行返回，或者右上角的X号关闭。
 3. 如果页面未加载出内容，最多连续 Wait 三次，否则执行 Back重新进入。
 4. 如果页面显示网络问题，需要重新加载，请点击重新加载。

@@ -28,5 +28,7 @@ data class ChatRequest(
     val topP: Double = 0.85,
     @SerializedName("frequency_penalty")
     val frequencyPenalty: Double = 0.2,
-    val stream: Boolean = false
+    val stream: Boolean = false,
+    @SerializedName("extra_body")
+    val extraBody: Map<String, Any>? = null
 )

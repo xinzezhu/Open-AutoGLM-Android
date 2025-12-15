@@ -278,8 +278,35 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (!result.success) {
                 retryCount++
                 Log.w("ChatViewModel", "动作执行失败，准备重试 ($retryCount/3): ${result.message}")
-                
-                if (retryCount >= 3) {
+
+                // 如果是 JSON 解析/格式错误，给模型一条明确的反馈消息
+                val parseError = result.message?.contains("无法从响应中提取有效的 JSON 动作") == true
+                if (parseError) {
+                    val feedbackText = buildString {
+                        appendLine("上一步你的输出格式错误，无法解析为合法的动作指令。")
+                        appendLine("请严格按照系统提示中的格式，仅输出以下两种之一：")
+                        appendLine("1) do(action=\"...\", ...)")
+                        appendLine("2) finish(message=\"...\")")
+                        appendLine("不要输出列表、自然语言说明或其他非规范格式。")
+                        appendLine()
+                        append("你上一次的输出是：")
+                        append(response.action.take(200))
+                    }
+                    messageContext.add(
+                        NetworkChatMessage(
+                            role = "user",
+                            content = listOf(
+                                com.example.open_autoglm_android.network.dto.ContentItem(
+                                    type = "text",
+                                    text = feedbackText
+                                )
+                            )
+                        )
+                    )
+                    Log.d("ChatViewModel", "已向模型反馈格式错误，要求按规范重新输出动作")
+                }
+
+                if (retryCount >= 10) {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = result.message ?: "执行动作失败"
@@ -287,7 +314,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     Log.e("ChatViewModel", "重试超过上限，结束流程: ${result.message}")
                     return
                 }
-                
+
                 // 重试：继续下一轮循环，重新截屏并请求模型
                 delay(800)
                 continue
