@@ -137,6 +137,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         var stepCount = 0
         val maxSteps = 50
         
+        var retryCount = 0
+        
         while (stepCount < maxSteps) {
             Log.d("ChatViewModel", "执行步骤 $stepCount")
             
@@ -252,12 +254,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             
             if (!result.success) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = result.message ?: "执行动作失败"
-                )
-                Log.e("ChatViewModel", "动作执行失败: ${result.message}")
-                return
+                retryCount++
+                Log.w("ChatViewModel", "动作执行失败，准备重试 ($retryCount/3): ${result.message}")
+                
+                if (retryCount >= 3) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = result.message ?: "执行动作失败"
+                    )
+                    Log.e("ChatViewModel", "重试超过上限，结束流程: ${result.message}")
+                    return
+                }
+                
+                // 重试：继续下一轮循环，重新截屏并请求模型
+                delay(800)
+                continue
+            } else {
+                // 成功则重置重试计数
+                retryCount = 0
             }
             
             // 等待界面稳定

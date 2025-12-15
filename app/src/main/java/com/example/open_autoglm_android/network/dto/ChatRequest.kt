@@ -23,7 +23,10 @@ data class ChatRequest(
     val messages: List<ChatMessage>,
     @SerializedName("max_tokens")
     val maxTokens: Int = 3000,
-    val temperature: Double = 0.1,
+    val temperature: Double = 0.0,
+    @SerializedName("top_p")
+    val topP: Double = 0.85,
     @SerializedName("frequency_penalty")
-    val frequencyPenalty: Double = 0.2
+    val frequencyPenalty: Double = 0.2,
+    val stream: Boolean = false
 )
