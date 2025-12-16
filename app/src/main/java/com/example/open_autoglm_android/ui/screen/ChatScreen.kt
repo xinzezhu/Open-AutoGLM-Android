@@ -1,12 +1,17 @@
 package com.example.open_autoglm_android.ui.screen
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,7 +19,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.open_autoglm_android.asr.AudioRecorder
+import com.example.open_autoglm_android.asr.WhisperAsrEngine
 import com.example.open_autoglm_android.ui.viewmodel.ChatViewModel
 import com.example.open_autoglm_android.ui.viewmodel.MessageRole
 import kotlinx.coroutines.launch
@@ -31,6 +39,28 @@ fun ChatScreen(
     val context = LocalContext.current
     
     var userInput by remember { mutableStateOf("") }
+    var isRecording by remember { mutableStateOf(false) }
+    var isTranscribing by remember { mutableStateOf(false) }
+    val audioRecorder = remember { AudioRecorder() }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            coroutineScope.launch {
+                startOrStopRecording(
+                    context = context,
+                    audioRecorder = audioRecorder,
+                    isRecording = isRecording,
+                    setIsRecording = { isRecording = it },
+                    setIsTranscribing = { isTranscribing = it },
+                    setUserInput = { userInput = it }
+                )
+            }
+        } else {
+            Toast.makeText(context, "录音权限被拒绝，无法使用本地语音输入", Toast.LENGTH_SHORT).show()
+        }
+    }
     
     // 显示任务完成 toast
     LaunchedEffect(uiState.taskCompletedMessage) {
@@ -180,6 +210,34 @@ fun ChatScreen(
                     enabled = !uiState.isLoading,
                     maxLines = 3
                 )
+                IconButton(
+                    onClick = {
+                        if (ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.RECORD_AUDIO
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        } else {
+                            coroutineScope.launch {
+                                startOrStopRecording(
+                                    context = context,
+                                    audioRecorder = audioRecorder,
+                                    isRecording = isRecording,
+                                    setIsRecording = { isRecording = it },
+                                    setIsTranscribing = { isTranscribing = it },
+                                    setUserInput = { userInput = it }
+                                )
+                            }
+                        }
+                    },
+                    enabled = !uiState.isLoading && !isTranscribing
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Mic,
+                        contentDescription = if (isRecording) "停止录音" else "开始录音"
+                    )
+                }
                 Button(
                     onClick = {
                         viewModel.sendMessage(userInput)
@@ -187,7 +245,13 @@ fun ChatScreen(
                     },
                     enabled = !uiState.isLoading && userInput.isNotBlank()
                 ) {
-                    Text("发送")
+                    Text(
+                        when {
+                            isTranscribing -> "识别中..."
+                            isRecording -> "录音中..."
+                            else -> "发送"
+                        }
+                    )
                 }
             }
         }
@@ -263,5 +327,37 @@ fun ChatMessageItem(message: com.example.open_autoglm_android.ui.viewmodel.ChatM
                 }
             }
         }
+    }
+}
+
+private suspend fun startOrStopRecording(
+    context: android.content.Context,
+    audioRecorder: AudioRecorder,
+    isRecording: Boolean,
+    setIsRecording: (Boolean) -> Unit,
+    setIsTranscribing: (Boolean) -> Unit,
+    setUserInput: (String) -> Unit
+) {
+    if (!isRecording) {
+        setIsRecording(true)
+        Toast.makeText(context, "开始录音，请讲话...", Toast.LENGTH_SHORT).show()
+        audioRecorder.start()
+    } else {
+        setIsRecording(false)
+        setIsTranscribing(true)
+        Toast.makeText(context, "录音结束，正在识别...", Toast.LENGTH_SHORT).show()
+        val pcm = audioRecorder.stop()
+        if (pcm.isNotEmpty()) {
+            val text = WhisperAsrEngine.transcribe(
+                context = context,
+                pcm = pcm,
+                sampleRate = audioRecorder.getSampleRate(),
+                language = null
+            )
+            setUserInput(text)
+        } else {
+            Toast.makeText(context, "未录到有效语音", Toast.LENGTH_SHORT).show()
+        }
+        setIsTranscribing(false)
     }
 }
