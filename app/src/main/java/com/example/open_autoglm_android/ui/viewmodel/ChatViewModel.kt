@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.open_autoglm_android.data.PreferencesRepository
 import com.example.open_autoglm_android.domain.ActionExecutor
+import com.example.open_autoglm_android.domain.AppRegistry
 import com.example.open_autoglm_android.network.ModelClient
 import com.example.open_autoglm_android.network.dto.ChatMessage as NetworkChatMessage
 import com.example.open_autoglm_android.service.AutoGLMAccessibilityService
@@ -105,6 +106,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         
         viewModelScope.launch {
             try {
+                // 在每次任务开始前，重新加载 AppRegistry，以确保最新的映射配置被加载
+                AppRegistry.initialize(getApplication())
+                
                 // 重新初始化 ModelClient（以防配置变化）
                 val baseUrl = preferencesRepository.getBaseUrlSync()
                 val apiKey = preferencesRepository.getApiKeySync() ?: "EMPTY"
