@@ -304,6 +304,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val maxSteps = 50
         
         var retryCount = 0
+
+        // 获取图片压缩配置
+        val compressionEnabled = preferencesRepository.getImageCompressionEnabledSync()
+        val compressionLevel = if (compressionEnabled) preferencesRepository.getImageCompressionLevelSync() else 80
         
         while (stepCount < maxSteps) {
             // 检查暂停状态
@@ -361,10 +365,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 if (messageContext.isEmpty()) {
                     messageContext.add(client.createSystemMessage())
                 }
-                messageContext.add(client.createUserMessage(userPrompt, screenshot, currentApp))
+                messageContext.add(client.createUserMessage(userPrompt, screenshot, currentApp, compressionLevel))
             } else {
                 // 后续调用：只添加屏幕信息
-                messageContext.add(client.createScreenInfoMessage(screenshot, currentApp))
+                messageContext.add(client.createScreenInfoMessage(screenshot, currentApp, compressionLevel))
             }
             
             // 更新悬浮窗状态

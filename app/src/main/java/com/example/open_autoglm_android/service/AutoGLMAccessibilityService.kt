@@ -2,15 +2,28 @@ package com.example.open_autoglm_android.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Path
+import android.graphics.Rect
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.example.open_autoglm_android.data.InputMode
+import com.example.open_autoglm_android.data.PreferencesRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -24,21 +37,21 @@ class AutoGLMAccessibilityService : AccessibilityService() {
         fun isServiceEnabled(): Boolean = instance != null
     }
     
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private lateinit var preferencesRepository: PreferencesRepository
+    var currentInputMode = InputMode.SET_TEXT
+        private set
+        
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     private val _currentApp = MutableStateFlow<String?>(null)
     val currentApp: StateFlow<String?> = _currentApp.asStateFlow()
     
-    /**
-     * 获取当前活跃应用的包名。
-     * 优先返回最后一次事件捕获的包名，若为空则尝试从当前活跃窗口的根节点主动查询。
-     */
     val safeCurrentApp: String?
         get() {
             val fromEvent = _currentApp.value
             if (!fromEvent.isNullOrBlank()) return fromEvent
-            
-            // 兜底方案：主动从根节点获取
             val fromRoot = rootInActiveWindow?.packageName?.toString()
-            Log.d("AutoGLMService", "从 rootInActiveWindow 获取包名: $fromRoot")
             return fromRoot
         }
     
@@ -48,202 +61,162 @@ class AutoGLMAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        // 无障碍服务启动时，如果保活开关已开启，则启动保活服务
-        if (AccessibilityTileService.isKeepAliveEnabled(this)) {
-            KeepAliveService.start(this)
+        preferencesRepository = PreferencesRepository(this)
+        
+        serviceScope.launch {
+            preferencesRepository.inputMode.collect { mode ->
+                currentInputMode = mode
+            }
         }
     }
     
     override fun onDestroy() {
         super.onDestroy()
         instance = null
+        mainHandler.removeCallbacksAndMessages(null)
     }
     
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event?.let {
-            when (it.eventType) {
-                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                    val packageName = it.packageName?.toString()
-                    if (!packageName.isNullOrBlank()) {
-                        _currentApp.value = packageName
-                    }
-                }
+            if (it.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+                _currentApp.value = it.packageName?.toString()
             }
         }
     }
     
-    override fun onInterrupt() {
-        // 服务中断
-    }
+    override fun onInterrupt() {}
     
     fun takeScreenshot(callback: (Bitmap?) -> Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                Log.d("AutoGLMService", "开始截图前隐藏悬浮窗...")
-                // 截图前隐藏悬浮窗
-                FloatingWindowService.getInstance()?.setVisibility(false)
-                
-                // 给系统一点点时间处理 UI 隐藏（通常 50ms 足够）
-                mainExecutor.execute {
-                    try {
-                        takeScreenshot(
-                            android.view.Display.DEFAULT_DISPLAY,
-                            mainExecutor,
-                            object : AccessibilityService.TakeScreenshotCallback {
-                                override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
-                                    // 截图成功后立即恢复悬浮窗
-                                    FloatingWindowService.getInstance()?.setVisibility(true)
-                                    Log.d("AutoGLMService", "截图成功")
-                                    
-                                    try {
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                            val hardwareBuffer = result.hardwareBuffer
-                                            val hardwareBitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, null)
-                                            hardwareBuffer?.close()
-                                            
-                                            // 将 HARDWARE 格式的 Bitmap 转换为可访问的格式
-                                            val bitmap = if (hardwareBitmap != null && hardwareBitmap.config == Bitmap.Config.HARDWARE) {
-                                                // 转换为 ARGB_8888 格式以便访问像素
-                                                hardwareBitmap.copy(Bitmap.Config.ARGB_8888, false)
-                                            } else {
-                                                hardwareBitmap
-                                            }
-                                            
-                                            // 回收硬件 Bitmap（如果已转换）
-                                            if (bitmap != hardwareBitmap) {
-                                                hardwareBitmap?.recycle()
-                                            }
-                                            
-                                            _latestScreenshot.value = bitmap
-                                            Log.d("AutoGLMService", "截图转换成功，尺寸: ${bitmap?.width}x${bitmap?.height}, 格式: ${bitmap?.config}")
-                                            callback(bitmap)
-                                        } else {
-                                            Log.w("AutoGLMService", "Android版本不支持")
-                                            callback(null)
-                                        }
-                                    } catch (e: Exception) {
-                                        Log.e("AutoGLMService", "处理截图失败", e)
-                                        callback(null)
-                                    }
-                                }
-                                
-                                override fun onFailure(errorCode: Int) {
-                                    // 截图失败也要恢复悬浮窗
-                                    FloatingWindowService.getInstance()?.setVisibility(true)
-                                    Log.e("AutoGLMService", "截图失败，错误码: $errorCode")
-                                    callback(null)
-                                }
-                            }
-                        )
-                    } catch (e: Exception) {
+            FloatingWindowService.getInstance()?.setVisibility(false)
+            mainExecutor.execute {
+                takeScreenshot(android.view.Display.DEFAULT_DISPLAY, mainExecutor, object : AccessibilityService.TakeScreenshotCallback {
+                    override fun onSuccess(result: AccessibilityService.ScreenshotResult) {
                         FloatingWindowService.getInstance()?.setVisibility(true)
-                        Log.e("AutoGLMService", "调用截图API内部失败", e)
+                        val hardwareBuffer = result.hardwareBuffer
+                        val hardwareBitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, null)
+                        hardwareBuffer?.close()
+                        val bitmap = hardwareBitmap?.copy(Bitmap.Config.ARGB_8888, false)
+                        _latestScreenshot.value = bitmap
+                        callback(bitmap)
+                    }
+                    override fun onFailure(errorCode: Int) {
+                        FloatingWindowService.getInstance()?.setVisibility(true)
                         callback(null)
                     }
-                }
-            } catch (e: Exception) {
-                FloatingWindowService.getInstance()?.setVisibility(true)
-                Log.e("AutoGLMService", "调用截图逻辑失败", e)
-                callback(null)
+                })
             }
-        } else {
-            Log.w("AutoGLMService", "Android版本低于R (API 30)，不支持截图。当前版本: ${Build.VERSION.SDK_INT}")
-            callback(null)
-        }
+        } else callback(null)
     }
     
     suspend fun takeScreenshotSuspend(): Bitmap? = suspendCancellableCoroutine { continuation ->
-        takeScreenshot { bitmap ->
-            continuation.resume(bitmap)
-        }
+        takeScreenshot { continuation.resume(it) }
     }
     
-    fun getRootNode(): AccessibilityNodeInfo? {
-        return rootInActiveWindow
-    }
+    fun getRootNode(): AccessibilityNodeInfo? = rootInActiveWindow
     
     fun findNodeByText(text: String): AccessibilityNodeInfo? {
-        val root = rootInActiveWindow ?: return null
-        val nodes = root.findAccessibilityNodeInfosByText(text)
-        return nodes.firstOrNull()
+        return rootInActiveWindow?.findAccessibilityNodeInfosByText(text)?.firstOrNull()
     }
     
     fun tap(x: Float, y: Float) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val path = Path().apply {
-                moveTo(x, y)
-            }
+            val path = Path().apply { moveTo(x, y) }
             val gesture = GestureDescription.Builder()
-                .addStroke(GestureDescription.StrokeDescription(path, 0, 100))
+                .addStroke(GestureDescription.StrokeDescription(path, 0, 50))
                 .build()
-            
             dispatchGesture(gesture, null, null)
         }
     }
-    
+
     fun longPress(x: Float, y: Float) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val path = Path().apply {
-                moveTo(x, y)
-            }
+            val path = Path().apply { moveTo(x, y) }
             val gesture = GestureDescription.Builder()
-                .addStroke(GestureDescription.StrokeDescription(path, 0, 500))
+                .addStroke(GestureDescription.StrokeDescription(path, 0, 800))
                 .build()
-            
             dispatchGesture(gesture, null, null)
         }
     }
     
-    fun swipe(startX: Float, startY: Float, endX: Float, endY: Float, duration: Long = 300) {
+    fun swipe(startX: Float, startY: Float, endX: Float, endY: Float) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val path = Path().apply {
-                moveTo(startX, startY)
-                lineTo(endX, endY)
-            }
+            val path = Path().apply { moveTo(startX, startY); lineTo(endX, endY) }
             val gesture = GestureDescription.Builder()
-                .addStroke(GestureDescription.StrokeDescription(path, 0, duration))
+                .addStroke(GestureDescription.StrokeDescription(path, 0, 300))
                 .build()
-            
             dispatchGesture(gesture, null, null)
         }
     }
     
-    fun performBack() {
-        performGlobalAction(GLOBAL_ACTION_BACK)
-    }
-    
-    fun performHome() {
-        performGlobalAction(GLOBAL_ACTION_HOME)
-    }
+    fun performBack() = performGlobalAction(GLOBAL_ACTION_BACK)
+    fun performHome() = performGlobalAction(GLOBAL_ACTION_HOME)
     
     fun performClick(node: AccessibilityNodeInfo): Boolean {
-        return if (node.isClickable) {
-            node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-        } else {
-            // 如果节点不可点击，尝试找到父节点
-            var parent = node.parent
-            while (parent != null) {
-                if (parent.isClickable) {
-                    val result = parent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                    parent.recycle()
-                    return result
-                }
-                val oldParent = parent
-                parent = parent.parent
-                oldParent.recycle()
-            }
-            false
-        }
+        if (node.isClickable) return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        node.parent?.let { return performClick(it) }
+        return false
     }
     
     fun setText(node: AccessibilityNodeInfo, text: String): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            val arguments = android.os.Bundle().apply {
-                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+        Log.d("AutoGLMService", "准备输入文本, 模式: $currentInputMode")
+        
+        if (currentInputMode != InputMode.SET_TEXT) {
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            val centerX = rect.centerX().toFloat()
+            val centerY = rect.centerY().toFloat()
+            Log.d("AutoGLMService", "执行物理点击激活: ($centerX, $centerY)")
+            tap(centerX, centerY)
+        }
+
+        return when (currentInputMode) {
+            InputMode.SET_TEXT -> {
+                val arguments = android.os.Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+                }
+                node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
             }
-            node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-        } else {
-            false
+            InputMode.PASTE -> {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("auto_glm", text))
+                mainHandler.postDelayed({
+                    val success = node.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                    Log.d("AutoGLMService", "粘贴结果: $success")
+                }, 400)
+                true
+            }
+            InputMode.IME -> {
+                if (MyInputMethodService.isEnabled()) {
+                    var attempts = 0
+                    val maxAttempts = 5
+                    
+                    fun tryTypeText() {
+                        if (attempts >= maxAttempts) {
+                            Log.e("AutoGLMService", "IME输入重试多次后依然失败")
+                            return
+                        }
+                        
+                        val success = MyInputMethodService.typeText(text)
+                        Log.d("AutoGLMService", "IME输入尝试 ${attempts + 1}, 结果: $success")
+                        
+                        if (!success) {
+                            attempts++
+                            // 如果失败，可能是键盘还没准备好，500ms后重试
+                            mainHandler.postDelayed({ tryTypeText() }, 500)
+                        }
+                    }
+                    
+                    // 第一次尝试放在 800ms 后，确保键盘动画基本完成
+                    mainHandler.postDelayed({ tryTypeText() }, 800)
+                    true
+                } else {
+                    val arguments = android.os.Bundle().apply {
+                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+                    }
+                    node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+                }
+            }
         }
     }
 }

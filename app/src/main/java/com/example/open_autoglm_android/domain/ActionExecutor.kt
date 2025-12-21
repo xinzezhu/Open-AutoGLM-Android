@@ -5,8 +5,10 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
+import com.example.open_autoglm_android.data.InputMode
 import com.example.open_autoglm_android.service.AutoGLMAccessibilityService
 import com.example.open_autoglm_android.service.FloatingWindowService
+import com.example.open_autoglm_android.service.MyInputMethodService
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -315,6 +317,17 @@ class ActionExecutor(private val service: AutoGLMAccessibilityService) {
     
     private suspend fun type(actionObj: JsonObject): ExecuteResult {
         val text = actionObj.get("text")?.asString ?: return ExecuteResult(success = false, message = "Type 操作缺少 text 参数")
+        
+        // 如果是 IME 模式且已启用，直接尝试输入，不需要找输入框
+        if (service.currentInputMode == InputMode.IME && MyInputMethodService.isEnabled()) {
+            val success = MyInputMethodService.typeText(text)
+            if (success) {
+                delay(500)
+                return ExecuteResult(success = true)
+            }
+            Log.w("ActionExecutor", "IME 直接输入失败，尝试寻找输入框")
+        }
+
         val root = service.getRootNode() ?: return ExecuteResult(success = false, message = "无法获取根节点")
         val inputNode = findEditableNode(root)
         if (inputNode != null) {

@@ -92,14 +92,14 @@ class ModelClient(
     /**
      * 创建用户消息（第一次调用，包含原始任务）
      */
-    fun createUserMessage(userPrompt: String, screenshot: Bitmap?, currentApp: String?): ChatMessage {
+    fun createUserMessage(userPrompt: String, screenshot: Bitmap?, currentApp: String?, quality: Int = 80): ChatMessage {
         val userContent = mutableListOf<ContentItem>()
         val screenInfoJson = buildScreenInfo(currentApp)
         val textContent = "$userPrompt\n\n$screenInfoJson"
 
         // 对齐旧项目：先放图片，再放文本
         screenshot?.let { bitmap ->
-            val base64Image = bitmapToBase64(bitmap)
+            val base64Image = bitmapToBase64(bitmap, quality)
             userContent.add(
                 ContentItem(
                     type = "image_url",
@@ -116,14 +116,14 @@ class ModelClient(
     /**
      * 创建屏幕信息消息（后续调用，只包含屏幕信息）
      */
-    fun createScreenInfoMessage(screenshot: Bitmap?, currentApp: String?): ChatMessage {
+    fun createScreenInfoMessage(screenshot: Bitmap?, currentApp: String?, quality: Int = 80): ChatMessage {
         val userContent = mutableListOf<ContentItem>()
         val screenInfoJson = buildScreenInfo(currentApp)
         val textContent = "** Screen Info **\n\n$screenInfoJson"
 
         // 对齐旧项目：先放图片，再放文本
         screenshot?.let { bitmap ->
-            val base64Image = bitmapToBase64(bitmap)
+            val base64Image = bitmapToBase64(bitmap, quality)
             userContent.add(
                 ContentItem(
                     type = "image_url",
@@ -169,10 +169,10 @@ class ModelClient(
         )
     }
     
-    private fun bitmapToBase64(bitmap: Bitmap): String {
+    private fun bitmapToBase64(bitmap: Bitmap, quality: Int): String {
         val outputStream = ByteArrayOutputStream()
         // 压缩图片以减少传输大小
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
         val byteArray = outputStream.toByteArray()
         return Base64.encodeToString(byteArray, Base64.NO_WRAP)
     }

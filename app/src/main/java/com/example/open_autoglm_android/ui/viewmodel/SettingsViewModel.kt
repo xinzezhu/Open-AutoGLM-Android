@@ -1,8 +1,11 @@
 package com.example.open_autoglm_android.ui.viewmodel
 
 import android.app.Application
+import android.provider.Settings
+import android.view.inputmethod.InputMethodManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.open_autoglm_android.data.InputMode
 import com.example.open_autoglm_android.data.PreferencesRepository
 import com.example.open_autoglm_android.service.FloatingWindowService
 import com.example.open_autoglm_android.util.AccessibilityServiceHelper
@@ -18,6 +21,11 @@ data class SettingsUiState(
     val isAccessibilityEnabled: Boolean = false,
     val floatingWindowEnabled: Boolean = false,
     val hasOverlayPermission: Boolean = false,
+    val inputMode: InputMode = InputMode.SET_TEXT,
+    val isImeEnabled: Boolean = false,
+    val isImeSelected: Boolean = false,
+    val imageCompressionEnabled: Boolean = false,
+    val imageCompressionLevel: Int = 50,
     val isLoading: Boolean = false,
     val saveSuccess: Boolean? = null,
     val error: String? = null
@@ -34,6 +42,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         loadSettings()
         checkAccessibilityService()
         checkOverlayPermission()
+        checkImeStatus()
     }
     
     private fun loadSettings() {
@@ -58,13 +67,26 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 updateFloatingWindowService(enabled)
             }
         }
+        viewModelScope.launch {
+            preferencesRepository.inputMode.collect { mode ->
+                _uiState.value = _uiState.value.copy(inputMode = mode)
+            }
+        }
+        viewModelScope.launch {
+            preferencesRepository.imageCompressionEnabled.collect { enabled ->
+                _uiState.value = _uiState.value.copy(imageCompressionEnabled = enabled)
+            }
+        }
+        viewModelScope.launch {
+            preferencesRepository.imageCompressionLevel.collect { level ->
+                _uiState.value = _uiState.value.copy(imageCompressionLevel = level)
+            }
+        }
     }
     
     fun checkAccessibilityService() {
-        // 同时检查系统设置和服务实例
         val enabledInSettings = AccessibilityServiceHelper.isAccessibilityServiceEnabled(getApplication())
         val serviceRunning = AccessibilityServiceHelper.isServiceRunning()
-        // 服务必须在系统设置中启用，并且实例正在运行
         val enabled = enabledInSettings && serviceRunning
         _uiState.value = _uiState.value.copy(isAccessibilityEnabled = enabled)
     }
@@ -73,12 +95,49 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         val hasPermission = FloatingWindowService.hasOverlayPermission(getApplication())
         _uiState.value = _uiState.value.copy(hasOverlayPermission = hasPermission)
     }
+
+    fun checkImeStatus() {
+        val context = getApplication<Application>()
+        val imm = context.getSystemService(Application.INPUT_METHOD_SERVICE) as InputMethodManager
+        val enabledMethods = imm.enabledInputMethodList
+        val myPackageName = context.packageName
+        
+        val isEnabled = enabledMethods.any { it.packageName == myPackageName }
+        val currentIme = Settings.Secure.getString(context.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
+        val isSelected = currentIme?.contains(myPackageName) == true
+        
+        _uiState.value = _uiState.value.copy(
+            isImeEnabled = isEnabled,
+            isImeSelected = isSelected
+        )
+    }
     
     fun setFloatingWindowEnabled(enabled: Boolean) {
         viewModelScope.launch {
             preferencesRepository.saveFloatingWindowEnabled(enabled)
             _uiState.value = _uiState.value.copy(floatingWindowEnabled = enabled)
             updateFloatingWindowService(enabled)
+        }
+    }
+
+    fun setInputMode(mode: InputMode) {
+        viewModelScope.launch {
+            preferencesRepository.saveInputMode(mode)
+            _uiState.value = _uiState.value.copy(inputMode = mode)
+        }
+    }
+
+    fun setImageCompressionEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.saveImageCompressionEnabled(enabled)
+            _uiState.value = _uiState.value.copy(imageCompressionEnabled = enabled)
+        }
+    }
+
+    fun setImageCompressionLevel(level: Int) {
+        viewModelScope.launch {
+            preferencesRepository.saveImageCompressionLevel(level)
+            _uiState.value = _uiState.value.copy(imageCompressionLevel = level)
         }
     }
     
@@ -106,21 +165,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun saveSettings() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null, saveSuccess = false)
-            
             try {
                 preferencesRepository.saveApiKey(_uiState.value.apiKey)
                 preferencesRepository.saveBaseUrl(_uiState.value.baseUrl)
                 preferencesRepository.saveModelName(_uiState.value.modelName)
-                
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    saveSuccess = true
-                )
+                _uiState.value = _uiState.value.copy(isLoading = false, saveSuccess = true)
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "保存失败: ${e.message}"
-                )
+                _uiState.value = _uiState.value.copy(isLoading = false, error = "保存失败: ${e.message}")
             }
         }
     }
