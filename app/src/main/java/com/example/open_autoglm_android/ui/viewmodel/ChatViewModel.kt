@@ -208,6 +208,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleDrawer() {
         _uiState.value = _uiState.value.copy(isDrawerOpen = !_uiState.value.isDrawerOpen)
     }
+
+    fun openDrawer(){
+        _uiState.value =  _uiState.value.copy(isDrawerOpen = true)
+    }
     
     fun closeDrawer() {
         _uiState.value = _uiState.value.copy(isDrawerOpen = false)

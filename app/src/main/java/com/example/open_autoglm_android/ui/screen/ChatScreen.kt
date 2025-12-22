@@ -37,51 +37,33 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.example.open_autoglm_android.data.Conversation
 import com.example.open_autoglm_android.ui.viewmodel.ChatViewModel
 import com.example.open_autoglm_android.ui.viewmodel.MessageRole
-import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ChatScreen(
-    viewModel: ChatViewModel,
-    onNavigateToPromptLog: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: ChatViewModel = viewModel(),
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
     var userInput by remember { mutableStateOf("") }
-    
+
     // 图片预览状态
     var previewImageIndex by remember { mutableStateOf<Int?>(null) }
     val allImageMessages = remember(uiState.messages) {
         uiState.messages.filter { it.imagePath != null }
     }
-    
-    // 同步 drawer 状态
-    LaunchedEffect(uiState.isDrawerOpen) {
-        if (uiState.isDrawerOpen) {
-            drawerState.open()
-        } else {
-            drawerState.close()
-        }
-    }
-    
-    LaunchedEffect(drawerState.currentValue) {
-        if (drawerState.currentValue == DrawerValue.Closed && uiState.isDrawerOpen) {
-            viewModel.closeDrawer()
-        }
-    }
-    
+
     // 显示任务完成 toast
     LaunchedEffect(uiState.taskCompletedMessage) {
         uiState.taskCompletedMessage?.let { message ->
@@ -90,245 +72,170 @@ fun ChatScreen(
             viewModel.clearTaskCompletedMessage()
         }
     }
-    
+
     LaunchedEffect(uiState.messages.size) {
         if (uiState.messages.isNotEmpty()) {
-            coroutineScope.launch {
-                listState.animateScrollToItem(uiState.messages.size - 1)
-            }
+            listState.animateScrollToItem(uiState.messages.size - 1)
         }
     }
-    
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            ConversationDrawer(
-                conversations = uiState.conversations,
-                currentConversationId = uiState.currentConversationId,
-                onConversationClick = { viewModel.switchConversation(it) },
-                onNewConversation = { viewModel.createNewConversation() },
-                onDeleteConversation = { viewModel.deleteConversation(it) }
-            )
-        }
-    ) {
-        Column(
-            modifier = modifier.fillMaxSize()
-        ) {
-            // 顶部工具栏
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surfaceVariant
+
+    Column(modifier = modifier.fillMaxSize().imePadding()) {
+
+        // 错误提示
+        uiState.error?.let { error ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(8.dp),
+                        .padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 菜单按钮
-                    IconButton(onClick = { viewModel.toggleDrawer() }) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = "对话列表"
-                        )
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = { viewModel.clearError() }) {
+                        Text("关闭")
                     }
-                    
-                    // 当前应用显示
-                    uiState.currentApp?.let { app ->
-                        Text(
-                            text = "当前: $app",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    } ?: Spacer(modifier = Modifier.weight(1f))
-                    
-                    // 按钮组
-                    Row {
-                        // 日志按钮
-                        IconButton(
-                            onClick = onNavigateToPromptLog
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Description,
-                                contentDescription = "提示词日志",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                }
+            }
+        }
 
-                        // 清理对话按钮
-                        if (uiState.messages.isNotEmpty()) {
-                            IconButton(
-                                onClick = { viewModel.clearMessages() },
-                                enabled = !uiState.isLoading
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "清理对话",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+        // 消息列表
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.background),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(uiState.messages) { message ->
+                ChatMessageItem(
+                    message = message,
+                    onImageClick = { path ->
+                        val index = allImageMessages.indexOfFirst { it.imagePath == path }
+                        if (index != -1) {
+                            previewImageIndex = index
                         }
                     }
-                }
+                )
             }
-            
-            // 错误提示
-            uiState.error?.let { error ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
+
+            if (uiState.isLoading) {
+                item {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Start
                     ) {
-                        Text(
-                            text = error,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(onClick = { viewModel.clearError() }) {
-                            Text("关闭")
-                        }
-                    }
-                }
-            }
-            
-            // 消息列表
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(uiState.messages) { message ->
-                    ChatMessageItem(
-                        message = message,
-                        onImageClick = { path ->
-                            val index = allImageMessages.indexOfFirst { it.imagePath == path }
-                            if (index != -1) {
-                                previewImageIndex = index
-                            }
-                        }
-                    )
-                }
-                
-                if (uiState.isLoading) {
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Start
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (uiState.isPaused)
+                                    Color(0xFFFFF9C4) // 浅黄色背景表示暂停
+                                else
+                                    MaterialTheme.colorScheme.surfaceVariant
+                            )
                         ) {
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (uiState.isPaused) 
-                                        Color(0xFFFFF9C4) // 浅黄色背景表示暂停
-                                    else 
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                )
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (uiState.isPaused) {
-                                        Icon(
-                                            imageVector = Icons.Default.Pause,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = Color(0xFFFBC02D)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("任务已暂停", color = Color(0xFF827717))
-                                    } else {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("正在执行步骤 ${uiState.messages.filter { it.role == MessageRole.ASSISTANT }.size + 1}...")
-                                    }
+                                if (uiState.isPaused) {
+                                    Icon(
+                                        imageVector = Icons.Default.Pause,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = Color(0xFFFBC02D)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("任务已暂停", color = Color(0xFF827717))
+                                } else {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("正在执行步骤 ${uiState.messages.filter { it.role == MessageRole.ASSISTANT }.size + 1}...")
                                 }
                             }
                         }
                     }
                 }
             }
-            
-            // 输入框
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shadowElevation = 8.dp
+        }
+
+        // 输入框
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shadowElevation = 8.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+                    .navigationBarsPadding(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    OutlinedTextField(
-                        value = userInput,
-                        onValueChange = { userInput = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text("输入任务描述...") },
-                        enabled = !uiState.isLoading,
-                        maxLines = 3
-                    )
-                    
-                    if (uiState.isLoading) {
-                        // 加载中显示暂停和停止按钮
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            // 暂停/继续按钮
-                            FilledIconButton(
-                                onClick = { viewModel.togglePause() },
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = Color(0xFFFBC02D) // 黄色
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = if (uiState.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                                    contentDescription = if (uiState.isPaused) "继续" else "暂停"
-                                )
-                            }
-                            
-                            // 停止按钮
-                            FilledIconButton(
-                                onClick = { viewModel.stopTask() },
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.error
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Stop,
-                                    contentDescription = "停止任务"
-                                )
-                            }
-                        }
-                    } else {
-                        // 非加载中显示发送按钮
-                        Button(
-                            onClick = {
-                                viewModel.sendMessage(userInput)
-                                userInput = ""
-                            },
-                            enabled = userInput.isNotBlank()
+                OutlinedTextField(
+                    value = userInput,
+                    onValueChange = { userInput = it },
+                    modifier = Modifier.weight(1f).imeNestedScroll() ,
+                    placeholder = { Text("输入任务描述...") },
+                    enabled = !uiState.isLoading,
+                    maxLines = 3
+                )
+
+                if (uiState.isLoading) {
+                    // 加载中显示暂停和停止按钮
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // 暂停/继续按钮
+                        FilledIconButton(
+                            onClick = { viewModel.togglePause() },
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = Color(0xFFFBC02D) // 黄色
+                            )
                         ) {
-                            Text("发送")
+                            Icon(
+                                imageVector = if (uiState.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                contentDescription = if (uiState.isPaused) "继续" else "暂停"
+                            )
                         }
+
+                        // 停止按钮
+                        FilledIconButton(
+                            onClick = { viewModel.stopTask() },
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Stop,
+                                contentDescription = "停止任务"
+                            )
+                        }
+                    }
+                } else {
+                    // 非加载中显示发送按钮
+                    Button(
+                        onClick = {
+                            viewModel.sendMessage(userInput)
+                            userInput = ""
+                        },
+                        enabled = userInput.isNotBlank()
+                    ) {
+                        Text("发送")
                     }
                 }
             }
@@ -336,7 +243,8 @@ fun ChatScreen(
     }
 
     // 全屏图片预览
-    previewImageIndex?.let { initialIndex ->
+    previewImageIndex?.let {
+            initialIndex ->
         ImagePreviewDialog(
             imageMessages = allImageMessages,
             initialIndex = initialIndex,
@@ -415,7 +323,10 @@ fun ImagePreviewDialog(
                 // 关闭按钮
                 IconButton(
                     onClick = onDismiss,
-                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                    modifier = Modifier.background(
+                        Color.Black.copy(alpha = 0.5f),
+                        RoundedCornerShape(24.dp)
+                    )
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
@@ -493,9 +404,9 @@ fun ConversationDrawer(
                     )
                 }
             }
-            
+
             HorizontalDivider()
-            
+
             // 对话列表
             LazyColumn(
                 modifier = Modifier.weight(1f),
@@ -524,7 +435,7 @@ fun ConversationItem(
 ) {
     val dateFormat = remember { SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
-    
+
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -545,7 +456,7 @@ fun ConversationItem(
             }
         )
     }
-    
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -573,7 +484,7 @@ fun ConversationItem(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        
+
         IconButton(
             onClick = { showDeleteDialog = true },
             modifier = Modifier.size(32.dp)
@@ -597,7 +508,7 @@ fun ChatMessageItem(
     val isUser = message.role == MessageRole.USER
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-    
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
@@ -626,7 +537,7 @@ fun ChatMessageItem(
                 // 思考过程（可展开）
                 if (!isUser && !message.thinking.isNullOrBlank()) {
                     var expanded by remember { mutableStateOf(false) }
-                    
+
                     TextButton(
                         onClick = { expanded = !expanded },
                         modifier = Modifier.fillMaxWidth()
@@ -636,7 +547,7 @@ fun ChatMessageItem(
                             style = MaterialTheme.typography.labelSmall
                         )
                     }
-                    
+
                     if (expanded) {
                         Text(
                             text = message.thinking,
@@ -645,18 +556,18 @@ fun ChatMessageItem(
                         )
                     }
                 }
-                
+
                 // 消息内容
                 Text(
                     text = message.content,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (isUser) FontWeight.Normal else FontWeight.Medium
                 )
-                
+
                 // 动作图片回看 (新增)
                 if (message.imagePath != null) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     AsyncImage(
                         model = File(message.imagePath),
                         contentDescription = "动作截图",
@@ -668,7 +579,7 @@ fun ChatMessageItem(
                         contentScale = ContentScale.Crop
                     )
                 }
-                
+
                 // 动作 JSON（如果是助手消息）
                 if (!isUser && message.action != null && message.action.contains("{")) {
                     Spacer(modifier = Modifier.height(8.dp))

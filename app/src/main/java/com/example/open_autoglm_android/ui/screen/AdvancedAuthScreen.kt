@@ -17,15 +17,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.open_autoglm_android.ui.viewmodel.AdvancedAuthViewModel
 import com.example.open_autoglm_android.ui.viewmodel.AdvancedAuthUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdvancedAuthScreen(
-    viewModel: AdvancedAuthViewModel,
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: AdvancedAuthViewModel = viewModel(),
+    onBack: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current

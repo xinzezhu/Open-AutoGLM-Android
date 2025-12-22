@@ -10,14 +10,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.open_autoglm_android.ui.viewmodel.ChatViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PromptLogScreen(
-    viewModel: ChatViewModel,
+    modifier: Modifier = Modifier,
+    viewModel: ChatViewModel = viewModel(),
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
 ) {
     Scaffold(
         modifier = modifier,
