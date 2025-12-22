@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -147,6 +148,20 @@ fun ChatScreen(
                     
                     // 按钮组
                     Row {
+                        // 重新执行按钮
+                        if (uiState.messages.isNotEmpty()) {
+                            IconButton(
+                                onClick = { viewModel.rerunTask() },
+                                enabled = !uiState.isLoading
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "重新执行",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
                         // 日志按钮
                         IconButton(
                             onClick = onNavigateToPromptLog

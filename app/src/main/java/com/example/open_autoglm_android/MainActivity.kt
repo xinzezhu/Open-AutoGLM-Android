@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.open_autoglm_android.ui.screen.AdvancedAuthScreen
 import com.example.open_autoglm_android.ui.screen.ChatScreen
@@ -21,6 +22,8 @@ import com.example.open_autoglm_android.ui.theme.OpenAutoGLMAndroidTheme
 import com.example.open_autoglm_android.ui.viewmodel.AdvancedAuthViewModel
 import com.example.open_autoglm_android.ui.viewmodel.ChatViewModel
 import com.example.open_autoglm_android.ui.viewmodel.SettingsViewModel
+import com.example.open_autoglm_android.util.AccessibilityServiceHelper
+import com.example.open_autoglm_android.util.AuthHelper
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,6 +40,7 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen() {
+    val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
     var previousTab by remember { mutableIntStateOf(0) }
     var showAdvancedAuth by remember { mutableStateOf(false) }
@@ -46,6 +50,15 @@ fun MainScreen() {
     val settingsViewModel: SettingsViewModel = viewModel()
     val advancedAuthViewModel: AdvancedAuthViewModel = viewModel()
     
+    // 启动时检查：如果有写入安全设置权限且无障碍服务没开，自动尝试开启
+    LaunchedEffect(Unit) {
+        if (AuthHelper.hasWriteSecureSettingsPermission(context)) {
+            if (!AccessibilityServiceHelper.isAccessibilityServiceEnabled(context)) {
+                AccessibilityServiceHelper.ensureServiceEnabledViaSecureSettings(context)
+            }
+        }
+    }
+
     // 处理系统返回键
     if (showAdvancedAuth) {
         BackHandler { showAdvancedAuth = false }
