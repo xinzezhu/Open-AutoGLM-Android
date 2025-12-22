@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -22,6 +23,8 @@ object PreferenceKeys {
     val INPUT_MODE = intPreferencesKey("input_mode")
     val IMAGE_COMPRESSION_ENABLED = booleanPreferencesKey("image_compression_enabled")
     val IMAGE_COMPRESSION_LEVEL = intPreferencesKey("image_compression_level")
+    val SCREEN_SCALE_ENABLED = booleanPreferencesKey("screen_scale_enabled")
+    val SCREEN_SCALE_FACTOR = floatPreferencesKey("screen_scale_factor")
 }
 
 enum class InputMode(val value: Int) {
@@ -62,6 +65,14 @@ class PreferencesRepository(private val context: Context) {
 
     val imageCompressionLevel: Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[PreferenceKeys.IMAGE_COMPRESSION_LEVEL] ?: 50
+    }
+
+    val screenScaleEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PreferenceKeys.SCREEN_SCALE_ENABLED] ?: false
+    }
+
+    val screenScaleFactor: Flow<Float> = context.dataStore.data.map { preferences ->
+        preferences[PreferenceKeys.SCREEN_SCALE_FACTOR] ?: 0.5f
     }
     
     suspend fun saveApiKey(apiKey: String) {
@@ -105,6 +116,18 @@ class PreferencesRepository(private val context: Context) {
             preferences[PreferenceKeys.IMAGE_COMPRESSION_LEVEL] = level
         }
     }
+
+    suspend fun saveScreenScaleEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferenceKeys.SCREEN_SCALE_ENABLED] = enabled
+        }
+    }
+
+    suspend fun saveScreenScaleFactor(factor: Float) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferenceKeys.SCREEN_SCALE_FACTOR] = factor
+        }
+    }
     
     suspend fun getApiKeySync(): String? {
         return context.dataStore.data.map { it[PreferenceKeys.API_KEY] }.firstOrNull()
@@ -144,5 +167,17 @@ class PreferencesRepository(private val context: Context) {
         return context.dataStore.data.map { 
             it[PreferenceKeys.IMAGE_COMPRESSION_LEVEL] ?: 50
         }.firstOrNull() ?: 50
+    }
+
+    suspend fun getScreenScaleEnabledSync(): Boolean {
+        return context.dataStore.data.map { 
+            it[PreferenceKeys.SCREEN_SCALE_ENABLED] ?: false
+        }.firstOrNull() ?: false
+    }
+
+    suspend fun getScreenScaleFactorSync(): Float {
+        return context.dataStore.data.map { 
+            it[PreferenceKeys.SCREEN_SCALE_FACTOR] ?: 0.5f
+        }.firstOrNull() ?: 0.5f
     }
 }

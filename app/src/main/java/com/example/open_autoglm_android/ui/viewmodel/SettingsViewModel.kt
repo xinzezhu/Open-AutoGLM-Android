@@ -26,6 +26,8 @@ data class SettingsUiState(
     val isImeSelected: Boolean = false,
     val imageCompressionEnabled: Boolean = false,
     val imageCompressionLevel: Int = 50,
+    val screenScaleEnabled: Boolean = false,
+    val screenScaleFactor: Float = 0.5f,
     val isLoading: Boolean = false,
     val saveSuccess: Boolean? = null,
     val error: String? = null
@@ -80,6 +82,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             preferencesRepository.imageCompressionLevel.collect { level ->
                 _uiState.value = _uiState.value.copy(imageCompressionLevel = level)
+            }
+        }
+        viewModelScope.launch {
+            preferencesRepository.screenScaleEnabled.collect { enabled ->
+                _uiState.value = _uiState.value.copy(screenScaleEnabled = enabled)
+            }
+        }
+        viewModelScope.launch {
+            preferencesRepository.screenScaleFactor.collect { factor ->
+                _uiState.value = _uiState.value.copy(screenScaleFactor = factor)
             }
         }
     }
@@ -138,6 +150,20 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             preferencesRepository.saveImageCompressionLevel(level)
             _uiState.value = _uiState.value.copy(imageCompressionLevel = level)
+        }
+    }
+
+    fun setScreenScaleEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.saveScreenScaleEnabled(enabled)
+            _uiState.value = _uiState.value.copy(screenScaleEnabled = enabled)
+        }
+    }
+
+    fun setScreenScaleFactor(factor: Float) {
+        viewModelScope.launch {
+            preferencesRepository.saveScreenScaleFactor(factor)
+            _uiState.value = _uiState.value.copy(screenScaleFactor = factor)
         }
     }
     

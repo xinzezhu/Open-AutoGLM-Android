@@ -208,15 +208,16 @@ fun SettingsScreen(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
+                // 图片压缩
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "图片压缩", style = MaterialTheme.typography.bodyLarge)
+                        Text(text = "图片质量压缩", style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            text = "发送给模型前压缩图片，减少流量消耗和延迟",
+                            text = "降低 JPEG 质量，减少流量消耗",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -237,6 +238,41 @@ fun SettingsScreen(
                         onValueChange = { viewModel.setImageCompressionLevel(it.roundToInt()) },
                         valueRange = 10f..100f,
                         steps = 8
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 分辨率缩放
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "分辨率等比缩放", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = "缩小发送给模型的图片尺寸，大幅提升响应速度",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Switch(
+                        checked = uiState.screenScaleEnabled,
+                        onCheckedChange = { viewModel.setScreenScaleEnabled(it) }
+                    )
+                }
+
+                if (uiState.screenScaleEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "缩放比例: ${(uiState.screenScaleFactor * 100).roundToInt()}%",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Slider(
+                        value = uiState.screenScaleFactor,
+                        onValueChange = { viewModel.setScreenScaleFactor(it) },
+                        valueRange = 0.25f..0.75f,
+                        steps = 9 // 0.25, 0.30, ..., 0.75 (每 5% 一个步长)
                     )
                 }
             }

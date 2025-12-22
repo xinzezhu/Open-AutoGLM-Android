@@ -59,7 +59,12 @@ data class StepTiming(
     val screenshotMs: Long = 0,
     val networkMs: Long = 0,
     val executionMs: Long = 0,
-    val totalMs: Long = 0
+    val totalMs: Long = 0,
+    val imageWidth: Int = 0,
+    val imageHeight: Int = 0,
+    val imageSizeKb: Double = 0.0,
+    val originalWidth: Int = 0,
+    val originalHeight: Int = 0
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -328,6 +333,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val compressionEnabled = preferencesRepository.getImageCompressionEnabledSync()
         val compressionLevel = if (compressionEnabled) preferencesRepository.getImageCompressionLevelSync() else 80
         
+        // 获取图片缩放配置
+        val scaleEnabled = preferencesRepository.getScreenScaleEnabledSync()
+        val scaleFactor = if (scaleEnabled) preferencesRepository.getScreenScaleFactorSync() else 1.0f
+        
         while (stepCount < maxSteps) {
             val stepStartTime = System.currentTimeMillis()
             
@@ -359,7 +368,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             
             // 截图：如果当前在本应用前台，跳过截图发送以保护隐私
             val screenshotStartTime = System.currentTimeMillis()
-            val screenshot = if (isAutoGLMForeground) {
+            val originalScreenshot = if (isAutoGLMForeground) {
                 Log.d("ChatViewModel", "当前在本应用前台，跳过截图以保护隐私")
                 null
             } else {
@@ -367,7 +376,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             val screenshotDuration = System.currentTimeMillis() - screenshotStartTime
             
-            if (screenshot == null && !isAutoGLMForeground) {
+            if (originalScreenshot == null && !isAutoGLMForeground) {
                 val androidVersion = android.os.Build.VERSION.SDK_INT
                 val errorMessage = if (androidVersion < android.os.Build.VERSION_CODES.R) {
                     "无法获取屏幕截图：需要 Android 11 (API 30) 及以上版本，当前版本: Android ${android.os.Build.VERSION.RELEASE} (API $androidVersion)"
@@ -382,9 +391,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             
             // 检查截图是否全黑（在模拟器上可能无法正常截图，所以跳过检测）
-            if (screenshot != null) {
+            if (originalScreenshot != null) {
                 val isEmulator = DeviceUtils.isEmulator()
-                if (BitmapUtils.isBitmapBlack(screenshot)) {
+                if (BitmapUtils.isBitmapBlack(originalScreenshot)) {
                     if (isEmulator) {
                         // 在模拟器上，截图可能无法正常工作，但仍然尝试继续
                         Log.w("ChatViewModel", "检测到模拟器环境，截图是全黑的，但继续执行（模拟器限制）")
@@ -400,16 +409,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             
+            // 处理图片缩放和压缩
+            var imgToSend = originalScreenshot
+            var finalWidth = originalScreenshot?.width ?: 0
+            var finalHeight = originalScreenshot?.height ?: 0
+            var originalWidth = originalScreenshot?.width ?: 0
+            var originalHeight = originalScreenshot?.height ?: 0
+            var imgSizeKb = 0.0
+
+            if (originalScreenshot != null) {
+                // 如果开启了缩放
+                if (scaleEnabled && scaleFactor < 1.0f) {
+                    imgToSend = BitmapUtils.scaleBitmap(originalScreenshot, scaleFactor)
+                    finalWidth = imgToSend.width
+                    finalHeight = imgToSend.height
+                }
+                
+                // 估算压缩后的大小
+                val stream = java.io.ByteArrayOutputStream()
+                imgToSend.compress(Bitmap.CompressFormat.JPEG, compressionLevel, stream)
+                imgSizeKb = stream.size() / 1024.0
+            }
+
             // 构建消息上下文
             if (stepCount == 0) {
                 // 第一次调用：添加系统消息和用户消息（包含原始任务）
                 if (messageContext.isEmpty()) {
                     messageContext.add(client.createSystemMessage())
                 }
-                messageContext.add(client.createUserMessage(userPrompt, screenshot, currentApp, compressionLevel))
+                messageContext.add(client.createUserMessage(userPrompt, imgToSend, currentApp, compressionLevel, finalWidth, finalHeight))
             } else {
                 // 后续调用：只添加屏幕信息
-                messageContext.add(client.createScreenInfoMessage(screenshot, currentApp, compressionLevel))
+                messageContext.add(client.createScreenInfoMessage(imgToSend, currentApp, compressionLevel, finalWidth, finalHeight))
             }
             
             // 更新悬浮窗状态
@@ -450,16 +481,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             
             // 解析并执行动作
             val executionStartTime = System.currentTimeMillis()
+            // 注意：模型是基于缩放后的图片给出坐标的，执行时需要告诉执行器图片当时的尺寸（缩放后的）
+            // 执行器内部会根据屏幕真实尺寸进行坐标转换
             val displayMetrics = getApplication<Application>().resources.displayMetrics
             val result = actionExecutor?.execute(
                 response.action,
-                screenshot?.width ?: displayMetrics.widthPixels,
-                screenshot?.height ?: displayMetrics.heightPixels
+                finalWidth.takeIf { it > 0 } ?: displayMetrics.widthPixels,
+                finalHeight.takeIf { it > 0 } ?: displayMetrics.heightPixels
             ) ?: ExecuteResult(false, "ActionExecutor is null")
             val executionDuration = System.currentTimeMillis() - executionStartTime
             Log.d("ChatViewModel", "动作执行结果: success=${result.success}, message=${result.message}")
             
-            // 记录耗时
+            // 记录耗时和图片信息
             val stepTotalDuration = System.currentTimeMillis() - stepStartTime
             stepTimings.add(
                 StepTiming(
@@ -467,25 +500,31 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     screenshotMs = screenshotDuration,
                     networkMs = networkDuration,
                     executionMs = executionDuration,
-                    totalMs = stepTotalDuration
+                    totalMs = stepTotalDuration,
+                    imageWidth = finalWidth,
+                    imageHeight = finalHeight,
+                    imageSizeKb = imgSizeKb,
+                    originalWidth = originalWidth,
+                    originalHeight = originalHeight
                 )
             )
             
             // 如果执行成功且有截图，生成标记过的截图
             var savedImagePath: String? = null
-            if (result.success && screenshot != null && result.actionDetail != null) {
+            if (result.success && originalScreenshot != null && result.actionDetail != null) {
                 val detail = result.actionDetail
                 var markedBitmap: Bitmap? = null
                 
+                // 这里的坐标已经由 ActionExecutor 还原回屏幕原始坐标了，所以可以直接在原始截图上画
                 when (detail.type) {
                     "tap", "longpress", "doubletap", "type" -> {
                         if (detail.x1 != null && detail.y1 != null) {
-                            markedBitmap = BitmapUtils.drawTapMarker(screenshot, detail.x1, detail.y1)
+                            markedBitmap = BitmapUtils.drawTapMarker(originalScreenshot, detail.x1, detail.y1)
                         }
                     }
                     "swipe" -> {
                         if (detail.x1 != null && detail.y1 != null && detail.x2 != null && detail.y2 != null) {
-                            markedBitmap = BitmapUtils.drawSwipeMarker(screenshot, detail.x1, detail.y1, detail.x2, detail.y2)
+                            markedBitmap = BitmapUtils.drawSwipeMarker(originalScreenshot, detail.x1, detail.y1, detail.x2, detail.y2)
                         }
                     }
                 }
@@ -495,8 +534,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     markedBitmap.recycle()
                 } else {
                     // 如果没有特定标记，也保存原始截图以便回看
-                    savedImagePath = BitmapUtils.saveBitmap(getApplication(), screenshot)
+                    savedImagePath = BitmapUtils.saveBitmap(getApplication(), originalScreenshot)
                 }
+            }
+
+            // 如果缩放了图片且原图不再需要（已保存或未保存），回收缩放后的临时图片
+            if (imgToSend != originalScreenshot) {
+                imgToSend?.recycle()
             }
 
             // 添加助手消息到UI
@@ -655,7 +699,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (role == "ASSISTANT") {
                 if (assistantCount < stepTimings.size) {
                     val timing = stepTimings[assistantCount]
-                    result.append("\n\n[TIMING INFO - Step ${timing.step}]:")
+                    result.append("\n\n[TIMING & IMAGE INFO - Step ${timing.step}]:")
+                    if (timing.imageWidth > 0) {
+                        val scaleText = if (timing.originalWidth > timing.imageWidth) {
+                            " (Scaled from ${timing.originalWidth}x${timing.originalHeight})"
+                        } else ""
+                        result.append("\n- Image: ${timing.imageWidth}x${timing.imageHeight}$scaleText, size: ${"%.1f".format(timing.imageSizeKb)}KB")
+                    }
                     result.append("\n- Screenshot: ${timing.screenshotMs}ms")
                     result.append("\n- Network (LLM): ${timing.networkMs}ms")
                     result.append("\n- Action Execution: ${timing.executionMs}ms")

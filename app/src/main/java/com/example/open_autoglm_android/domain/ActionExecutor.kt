@@ -33,9 +33,9 @@ data class ExecuteResult(
 
 class ActionExecutor(private val service: AutoGLMAccessibilityService) {
     
-    suspend fun execute(actionJson: String, screenWidth: Int, screenHeight: Int): ExecuteResult {
+    suspend fun execute(actionJson: String, imageWidth: Int, imageHeight: Int): ExecuteResult {
         return try {
-            Log.d("ActionExecutor", "开始解析动作: ${actionJson.take(500)}")
+            Log.d("ActionExecutor", "开始解析动作: ${actionJson.take(500)}, 逻辑参考图宽高: ${imageWidth}x${imageHeight}")
             
             val jsonString = extractJsonFromText(actionJson)
             Log.d("ActionExecutor", "提取的 JSON: ${jsonString.take(200)}")
@@ -48,7 +48,7 @@ class ActionExecutor(private val service: AutoGLMAccessibilityService) {
                         if (jsonElement.isJsonObject) {
                             val actionObj = jsonElement.asJsonObject
                             Log.d("ActionExecutor", "修复后解析成功，对象: $actionObj")
-                            return processActionObject(actionObj, screenWidth, screenHeight)
+                            return processActionObject(actionObj, imageWidth, imageHeight)
                         }
                     } catch (e: Exception) {
                         Log.w("ActionExecutor", "修复后的 JSON 仍然无法解析", e)
@@ -74,7 +74,7 @@ class ActionExecutor(private val service: AutoGLMAccessibilityService) {
                     val fixedJson = tryFixMalformedJson(jsonString)
                     if (fixedJson.isNotEmpty()) {
                         try {
-                            return processActionObject(JsonParser.parseString(fixedJson).asJsonObject, screenWidth, screenHeight)
+                            return processActionObject(JsonParser.parseString(fixedJson).asJsonObject, imageWidth, imageHeight)
                         } catch (e3: Exception) {
                             Log.e("ActionExecutor", "修复后仍然无法解析", e3)
                         }
@@ -95,14 +95,14 @@ class ActionExecutor(private val service: AutoGLMAccessibilityService) {
             val actionObj = jsonElement.asJsonObject
             Log.d("ActionExecutor", "解析成功，对象: $actionObj")
             
-            processActionObject(actionObj, screenWidth, screenHeight)
+            processActionObject(actionObj, imageWidth, imageHeight)
         } catch (e: Exception) {
             Log.e("ActionExecutor", "解析动作失败", e)
             ExecuteResult(success = false, message = "解析动作失败: ${e.message}")
         }
     }
     
-    private suspend fun processActionObject(actionObj: JsonObject, screenWidth: Int, screenHeight: Int): ExecuteResult {
+    private suspend fun processActionObject(actionObj: JsonObject, imageWidth: Int, imageHeight: Int): ExecuteResult {
         val metadata = actionObj.get("_metadata")?.asString ?: ""
         
         return when (metadata) {
@@ -113,7 +113,7 @@ class ActionExecutor(private val service: AutoGLMAccessibilityService) {
             }
             "do" -> {
                 val action = actionObj.get("action")?.asString ?: ""
-                executeAction(action, actionObj, screenWidth, screenHeight)
+                executeAction(action, actionObj, imageWidth, imageHeight)
             }
             else -> {
                 ExecuteResult(success = false, message = "未知的动作类型: $metadata")
@@ -242,25 +242,51 @@ class ActionExecutor(private val service: AutoGLMAccessibilityService) {
         return ""
     }
     
-    private fun convertRelativeToAbsolute(element: List<Float>, screenWidth: Int, screenHeight: Int): Pair<Float, Float> {
-        val x = (element[0] / 1000f) * screenWidth
-        val y = (element[1] / 1000f) * screenHeight
-        return Pair(x, y)
+    /**
+     * 将模型给出的相对坐标（0-1000）或基于逻辑图的绝对坐标还原为屏幕真实物理坐标
+     */
+    private fun convertToRealPhysicalCoordinates(x: Float, y: Float, logicalWidth: Int, logicalHeight: Int): Pair<Float, Float> {
+        val displayMetrics = service.resources.displayMetrics
+        val realScreenWidth = displayMetrics.widthPixels
+        val realScreenHeight = displayMetrics.heightPixels
+        
+        // 如果 x, y 很大（比如 > 1000），说明模型可能在输出基于逻辑图分辨率的绝对坐标
+        // 如果 x, y 在 0-1000 之间，大部分模型规范是按 1000 为基准的相对坐标
+        
+        // 逻辑：先判断是否为 1000 基准的相对坐标
+        // 注意：目前项目中 convertRelativeToAbsolute 的旧实现是强制除以 1000f
+        
+        val finalX: Float
+        val finalY: Float
+        
+        if (x <= 1000f && y <= 1000f) {
+            // 相对坐标模式
+            finalX = (x / 1000f) * realScreenWidth
+            finalY = (y / 1000f) * realScreenHeight
+        } else {
+            // 绝对坐标模式（基于发送给模型的图片分辨率）
+            finalX = (x / logicalWidth.toFloat()) * realScreenWidth
+            finalY = (y / logicalHeight.toFloat()) * realScreenHeight
+        }
+        
+        Log.d("ActionExecutor", "坐标还原: 模型输入($x, $y), 逻辑参考图(${logicalWidth}x${logicalHeight}), 物理屏幕(${realScreenWidth}x${realScreenHeight}) -> 还原物理坐标($finalX, $finalY)")
+        
+        return Pair(finalX, finalY)
     }
     
-    private suspend fun executeAction(action: String, actionObj: JsonObject, screenWidth: Int, screenHeight: Int): ExecuteResult {
+    private suspend fun executeAction(action: String, actionObj: JsonObject, logicalWidth: Int, logicalHeight: Int): ExecuteResult {
         FloatingWindowService.getInstance()?.setVisibility(false)
         delay(100)
         val result = try {
             when (action.lowercase()) {
                 "launch" -> launchApp(actionObj)
-                "tap" -> tap(actionObj, screenWidth, screenHeight)
+                "tap" -> tap(actionObj, logicalWidth, logicalHeight)
                 "type" -> type(actionObj)
-                "swipe" -> swipe(actionObj, screenWidth, screenHeight)
+                "swipe" -> swipe(actionObj, logicalWidth, logicalHeight)
                 "back" -> back()
                 "home" -> home()
-                "longpress", "long press" -> longPress(actionObj, screenWidth, screenHeight)
-                "doubletap", "double tap" -> doubleTap(actionObj, screenWidth, screenHeight)
+                "longpress", "long press" -> longPress(actionObj, logicalWidth, logicalHeight)
+                "doubletap", "double tap" -> doubleTap(actionObj, logicalWidth, logicalHeight)
                 "wait" -> wait(actionObj)
                 else -> ExecuteResult(success = false, message = "不支持的操作: $action")
             }
@@ -298,12 +324,13 @@ class ActionExecutor(private val service: AutoGLMAccessibilityService) {
         }
     }
     
-    private suspend fun tap(actionObj: JsonObject, screenWidth: Int, screenHeight: Int): ExecuteResult {
+    private suspend fun tap(actionObj: JsonObject, logicalWidth: Int, logicalHeight: Int): ExecuteResult {
         val element = actionObj.get("element")
         if (element?.isJsonArray == true) {
             val array = element.asJsonArray
             if (array.size() >= 2) {
-                val (absoluteX, absoluteY) = convertRelativeToAbsolute(listOf(array[0].asFloat, array[1].asFloat), screenWidth, screenHeight)
+                // 执行坐标还原
+                val (absoluteX, absoluteY) = convertToRealPhysicalCoordinates(array[0].asFloat, array[1].asFloat, logicalWidth, logicalHeight)
                 service.tap(absoluteX, absoluteY)
                 delay(500)
                 return ExecuteResult(
@@ -369,12 +396,12 @@ class ActionExecutor(private val service: AutoGLMAccessibilityService) {
         return ExecuteResult(success = false, message = "找不到输入框")
     }
     
-    private suspend fun swipe(actionObj: JsonObject, screenWidth: Int, screenHeight: Int): ExecuteResult {
+    private suspend fun swipe(actionObj: JsonObject, logicalWidth: Int, logicalHeight: Int): ExecuteResult {
         val start = actionObj.get("start")?.asJsonArray
         val end = actionObj.get("end")?.asJsonArray
         if (start == null || end == null || start.size() < 2 || end.size() < 2) return ExecuteResult(success = false, message = "Swipe 操作缺少 start 或 end 参数")
-        val (startX, startY) = convertRelativeToAbsolute(listOf(start[0].asFloat, start[1].asFloat), screenWidth, screenHeight)
-        val (endX, endY) = convertRelativeToAbsolute(listOf(end[0].asFloat, end[1].asFloat), screenWidth, screenHeight)
+        val (startX, startY) = convertToRealPhysicalCoordinates(start[0].asFloat, start[1].asFloat, logicalWidth, logicalHeight)
+        val (endX, endY) = convertToRealPhysicalCoordinates(end[0].asFloat, end[1].asFloat, logicalWidth, logicalHeight)
         service.swipe(startX, startY, endX, endY)
         delay(500)
         return ExecuteResult(
@@ -396,10 +423,10 @@ class ActionExecutor(private val service: AutoGLMAccessibilityService) {
         return ExecuteResult(success = true, actionDetail = ActionDetail("home"))
     }
     
-    private suspend fun longPress(actionObj: JsonObject, screenWidth: Int, screenHeight: Int): ExecuteResult {
+    private suspend fun longPress(actionObj: JsonObject, logicalWidth: Int, logicalHeight: Int): ExecuteResult {
         val element = actionObj.get("element")?.asJsonArray
         if (element == null || element.size() < 2) return ExecuteResult(success = false, message = "LongPress 操作缺少 element 参数")
-        val (x, y) = convertRelativeToAbsolute(listOf(element[0].asFloat, element[1].asFloat), screenWidth, screenHeight)
+        val (x, y) = convertToRealPhysicalCoordinates(element[0].asFloat, element[1].asFloat, logicalWidth, logicalHeight)
         service.longPress(x, y)
         delay(800)
         return ExecuteResult(
@@ -409,10 +436,10 @@ class ActionExecutor(private val service: AutoGLMAccessibilityService) {
         )
     }
     
-    private suspend fun doubleTap(actionObj: JsonObject, screenWidth: Int, screenHeight: Int): ExecuteResult {
+    private suspend fun doubleTap(actionObj: JsonObject, logicalWidth: Int, logicalHeight: Int): ExecuteResult {
         val element = actionObj.get("element")?.asJsonArray
         if (element == null || element.size() < 2) return ExecuteResult(success = false, message = "DoubleTap 操作缺少 element 参数")
-        val (x, y) = convertRelativeToAbsolute(listOf(element[0].asFloat, element[1].asFloat), screenWidth, screenHeight)
+        val (x, y) = convertToRealPhysicalCoordinates(element[0].asFloat, element[1].asFloat, logicalWidth, logicalHeight)
         service.tap(x, y)
         delay(100)
         service.tap(x, y)

@@ -97,10 +97,12 @@ class ModelClient(
         text: String,
         screenshot: Bitmap?,
         currentApp: String?,
-        quality: Int = 80
+        quality: Int = 80,
+        width: Int? = null,
+        height: Int? = null
     ): ChatMessage {
         val userContent = mutableListOf<ContentItem>()
-        val screenInfoJson = buildScreenInfo(currentApp)
+        val screenInfoJson = buildScreenInfo(currentApp, width, height)
         val fullText = if (text.isEmpty()) screenInfoJson else "$text\n\n$screenInfoJson"
 
         // 对齐旧项目：先放图片，再放文本
@@ -121,15 +123,15 @@ class ModelClient(
     /**
      * 创建用户消息（第一次调用，包含原始任务）
      */
-    fun createUserMessage(userPrompt: String, screenshot: Bitmap?, currentApp: String?, quality: Int = 80): ChatMessage {
-        return createMessage(userPrompt, screenshot, currentApp, quality)
+    fun createUserMessage(userPrompt: String, screenshot: Bitmap?, currentApp: String?, quality: Int = 80, width: Int? = null, height: Int? = null): ChatMessage {
+        return createMessage(userPrompt, screenshot, currentApp, quality, width, height)
     }
     
     /**
      * 创建屏幕信息消息（后续调用，只包含屏幕信息）
      */
-    fun createScreenInfoMessage(screenshot: Bitmap?, currentApp: String?, quality: Int = 80): ChatMessage {
-        return createMessage("** Screen Info **", screenshot, currentApp, quality)
+    fun createScreenInfoMessage(screenshot: Bitmap?, currentApp: String?, quality: Int = 80, width: Int? = null, height: Int? = null): ChatMessage {
+        return createMessage("** Screen Info **", screenshot, currentApp, quality, width, height)
     }
     
     /**
@@ -146,9 +148,13 @@ class ModelClient(
     /**
      * 构建屏幕信息（使用 JsonObject 确保转义安全）
      */
-    private fun buildScreenInfo(currentApp: String?): String {
+    private fun buildScreenInfo(currentApp: String?, width: Int? = null, height: Int? = null): String {
         val json = JsonObject()
         json.addProperty("current_app", currentApp ?: "Unknown")
+        if (width != null && height != null) {
+            json.addProperty("screen_width", width)
+            json.addProperty("screen_height", height)
+        }
         return json.toString()
     }
     
@@ -213,6 +219,7 @@ class ModelClient(
 3. 进入无关页面需优先 Back 返回。
 4. 执行下一步前必须确认上一步是否生效；点击无效需调整位置或等待重试。
 5. 任务完成后必须使用 finish 结束，并说明结果或失败原因。
+6. 如果没有屏幕图片执行打开app，或者回到首页
 
 【执行策略（在不违反上述规则前提下使用）】
 - 找不到目标内容时可 Swipe 滑动查找。

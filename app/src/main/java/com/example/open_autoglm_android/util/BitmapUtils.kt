@@ -24,7 +24,7 @@ object BitmapUtils {
             Log.w("BitmapUtils", "Bitmap 尺寸为 0")
             return true
         }
-        
+
         // 如果 Bitmap 是 HARDWARE 格式，需要先转换
         val accessibleBitmap = if (bitmap.config == Bitmap.Config.HARDWARE) {
             Log.d("BitmapUtils", "转换 HARDWARE Bitmap 为 ARGB_8888")
@@ -32,26 +32,26 @@ object BitmapUtils {
         } else {
             null
         }
-        
+
         val targetBitmap = accessibleBitmap ?: bitmap
-        
+
         try {
             // 采样检查，使用更多的采样点以获得更准确的结果
             // 在 1080x1920 的屏幕上，采样约 100 个点
             val samplePoints = 100
             val stepX = maxOf(1, targetBitmap.width / 10)
             val stepY = maxOf(1, targetBitmap.height / 10)
-            
+
             var blackPixels = 0
             var totalPixels = 0
-            
+
             for (y in 0 until targetBitmap.height step stepY) {
                 for (x in 0 until targetBitmap.width step stepX) {
                     val pixel = targetBitmap.getPixel(x, y)
                     val r = (pixel shr 16) and 0xFF
                     val g = (pixel shr 8) and 0xFF
                     val b = pixel and 0xFF
-                    
+
                     // 如果 RGB 值都很低（小于 10），认为是黑色
                     if (r < 10 && g < 10 && b < 10) {
                         blackPixels++
@@ -59,15 +59,25 @@ object BitmapUtils {
                     totalPixels++
                 }
             }
-            
+
             val blackRatio = blackPixels.toDouble() / totalPixels
             val isBlack = blackRatio >= threshold
-            
+
             return isBlack
         } finally {
             // 如果创建了临时 Bitmap，需要回收
             accessibleBitmap?.recycle()
         }
+    }
+
+    /**
+     * 等比缩放 Bitmap
+     */
+    fun scaleBitmap(bitmap: Bitmap, scale: Float): Bitmap {
+        if (scale >= 1.0f) return bitmap
+        val width = (bitmap.width * scale).toInt()
+        val height = (bitmap.height * scale).toInt()
+        return Bitmap.createScaledBitmap(bitmap, width, height, true)
     }
 
     /**
