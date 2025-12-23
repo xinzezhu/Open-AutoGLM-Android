@@ -22,12 +22,12 @@ class ModelClient(
     private val apiKey: String
 ) {
     private val api: AutoGLMApi
-    
+
     init {
         val loggingInterceptor = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BODY
         }
-        
+
         val client = OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
             .addInterceptor { chain ->
@@ -41,16 +41,16 @@ class ModelClient(
             .readTimeout(120, TimeUnit.SECONDS)
             .writeTimeout(120, TimeUnit.SECONDS)
             .build()
-        
+
         val retrofit = Retrofit.Builder()
             .baseUrl(baseUrl.ensureTrailingSlash())
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
-        
+
         api = retrofit.create(AutoGLMApi::class.java)
     }
-    
+
     /**
      * 请求模型（使用消息上下文）
      */
@@ -67,9 +67,9 @@ class ModelClient(
             frequencyPenalty = 0.2,
             stream = false
         )
-        
+
         val response = api.chatCompletion(request)
-        
+
         if (response.isSuccessful && response.body() != null) {
             val responseBody = response.body()!!
             val content = responseBody.choices.firstOrNull()?.message?.content ?: ""
@@ -78,7 +78,7 @@ class ModelClient(
             throw Exception("API request failed: ${response.code()} ${response.message()}")
         }
     }
-    
+
     /**
      * 创建系统消息
      */
@@ -89,7 +89,7 @@ class ModelClient(
             content = listOf(ContentItem(type = "text", text = systemPrompt))
         )
     }
-    
+
     /**
      * 创建消息的通用基础方法
      */
@@ -126,14 +126,14 @@ class ModelClient(
     fun createUserMessage(userPrompt: String, screenshot: Bitmap?, currentApp: String?, quality: Int = 80, width: Int? = null, height: Int? = null): ChatMessage {
         return createMessage(userPrompt, screenshot, currentApp, quality, width, height)
     }
-    
+
     /**
      * 创建屏幕信息消息（后续调用，只包含屏幕信息）
      */
     fun createScreenInfoMessage(screenshot: Bitmap?, currentApp: String?, quality: Int = 80, width: Int? = null, height: Int? = null): ChatMessage {
         return createMessage("** Screen Info **", screenshot, currentApp, quality, width, height)
     }
-    
+
     /**
      * 创建助手消息（添加到上下文）
      */
@@ -144,20 +144,20 @@ class ModelClient(
             content = listOf(ContentItem(type = "text", text = content))
         )
     }
-    
+
     /**
      * 构建屏幕信息（使用 JsonObject 确保转义安全）
      */
     private fun buildScreenInfo(currentApp: String?, width: Int? = null, height: Int? = null): String {
         val json = JsonObject()
-        json.addProperty("current_app", currentApp ?: "Unknown")
+        json.addProperty("pkg_name", currentApp ?: "Unknown")
         if (width != null && height != null) {
             json.addProperty("screen_width", width)
             json.addProperty("screen_height", height)
         }
         return json.toString()
     }
-    
+
     /**
      * 从消息中移除图片内容，只保留文本（节省 token）
      */
@@ -168,7 +168,7 @@ class ModelClient(
             content = textOnlyContent
         )
     }
-    
+
     private fun bitmapToBase64(bitmap: Bitmap, quality: Int): String {
         return ByteArrayOutputStream().use { outputStream ->
             bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
@@ -176,7 +176,7 @@ class ModelClient(
             Base64.encodeToString(byteArray, Base64.NO_WRAP)
         }
     }
-    
+
     private fun buildSystemPrompt(): String {
         return """
 今天的日期是：${java.time.LocalDate.now()}
@@ -229,13 +229,13 @@ class ModelClient(
 - 若操作失败但可继续任务，请继续并在 finish 中说明。
 """.trimIndent()
     }
-    
+
     private fun parseResponse(content: String): ModelResponse {
         Log.d("ModelClient", "解析响应内容: ${content.take(500)}")
-        
+
         var thinking = ""
         var action = ""
-        
+
         if (content.contains("finish(message=")) {
             val parts = content.split("finish(message=", limit = 2)
             thinking = parts[0].trim()
@@ -256,7 +256,7 @@ class ModelClient(
         } else {
             action = content.trim()
         }
-        
+
         if (!action.startsWith("{") && !action.startsWith("do(") && !action.startsWith("finish(")) {
             val funcMatch = Regex("""(do|finish)\s*\([^)]+\)""", RegexOption.IGNORE_CASE).find(content)
             if (funcMatch != null) {
@@ -268,15 +268,15 @@ class ModelClient(
                 }
             }
         }
-        
+
         return ModelResponse(thinking = thinking, action = action)
     }
-    
+
     private fun extractJsonFromContent(content: String): String {
         var startIndex = -1
         var braceCount = 0
         val candidates = mutableListOf<String>()
-        
+
         for (i in content.indices) {
             when (content[i]) {
                 '{' -> {
@@ -298,7 +298,7 @@ class ModelClient(
         }
         return candidates.firstOrNull() ?: ""
     }
-    
+
     private fun String.ensureTrailingSlash(): String {
         return if (this.endsWith("/")) this else "$this/"
     }

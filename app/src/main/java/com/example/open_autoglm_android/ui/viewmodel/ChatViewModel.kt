@@ -275,8 +275,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
         FloatingWindowService.getInstance()?.updatePauseStatus(false)
         
+        val userMessageId = System.currentTimeMillis().toString()
         val userMessage = ChatMessage(
-            id = System.currentTimeMillis().toString(),
+            id = userMessageId,
             role = MessageRole.USER,
             content = userInput
         )
@@ -319,7 +320,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 saveCurrentMessages()
                 
                 // 执行任务循环
-                executeTaskLoop(userInput, modelName)
+                executeTaskLoop(userInput, modelName, userMessageId)
                 
             } catch (e: CancellationException) {
                 Log.d("ChatViewModel", "任务已取消")
@@ -359,7 +360,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         FloatingWindowService.getInstance()?.updatePauseStatus(newState)
     }
     
-    private suspend fun executeTaskLoop(userPrompt: String, modelName: String) {
+    private suspend fun executeTaskLoop(userPrompt: String, modelName: String, userMessageId: String? = null) {
         val accessibilityService = AutoGLMAccessibilityService.getInstance() ?: return
         val client = modelClient ?: return
         val executor = actionExecutor ?: return
@@ -449,6 +450,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             
+            // 如果是第一步，保存截图到用户消息
+            if (stepCount == 0 && originalScreenshot != null && userMessageId != null) {
+                val path = BitmapUtils.saveBitmap(getApplication(), originalScreenshot)
+                if (path != null) {
+                    _uiState.value = _uiState.value.copy(
+                        messages = _uiState.value.messages.map { 
+                            if (it.id == userMessageId) it.copy(imagePath = path) else it 
+                        }
+                    )
+                }
+            }
+            
             // 处理图片缩放和压缩
             var imgToSend = originalScreenshot
             var finalWidth = originalScreenshot?.width ?: 0
@@ -500,8 +513,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val networkDuration = System.currentTimeMillis() - networkStartTime
             retryCount = 0
 
+            val assistantMessageId = System.currentTimeMillis().toString()
             val assistantMessage = ChatMessage(
-                id = System.currentTimeMillis().toString(),
+                id = assistantMessageId,
                 role = MessageRole.ASSISTANT,
                 content = response.action,
                 thinking = response.thinking,
@@ -525,6 +539,42 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             
             val executeResult = executor.execute(response.action, finalWidth, finalHeight)
             val executionDuration = System.currentTimeMillis() - executionStartTime
+            
+            // 如果执行成功，保存带有标记的截图
+            if (executeResult.success && originalScreenshot != null) {
+                val detail = executeResult.actionDetail
+                var markerBitmap: Bitmap? = null
+                
+                if (detail != null) {
+                    markerBitmap = when (detail.type.lowercase()) {
+                        "tap", "longpress", "doubletap" -> {
+                            if (detail.x1 != null && detail.y1 != null) {
+                                BitmapUtils.drawTapMarker(originalScreenshot, detail.x1, detail.y1)
+                            } else null
+                        }
+                        "swipe" -> {
+                            if (detail.x1 != null && detail.y1 != null && detail.x2 != null && detail.y2 != null) {
+                                BitmapUtils.drawSwipeMarker(originalScreenshot, detail.x1, detail.y1, detail.x2, detail.y2)
+                            } else null
+                        }
+                        else -> null
+                    }
+                }
+                
+                val bitmapToSave = markerBitmap ?: originalScreenshot
+                val path = BitmapUtils.saveBitmap(getApplication(), bitmapToSave)
+                if (path != null) {
+                    _uiState.value = _uiState.value.copy(
+                        messages = _uiState.value.messages.map { 
+                            if (it.id == assistantMessageId) it.copy(imagePath = path) else it 
+                        }
+                    )
+                }
+                // 回收 markerBitmap 避免内存泄漏
+                if (markerBitmap != null && markerBitmap != originalScreenshot) {
+                    markerBitmap.recycle()
+                }
+            }
             
             // 记录耗时
             val totalDuration = System.currentTimeMillis() - stepStartTime
