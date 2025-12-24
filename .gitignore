@@ -1,26 +1,37 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+### Android template
+# Gradle files
+.gradle/
+build/
+
+# Local configuration file (sdk path, etc)
 local.properties
+
+# Log/OS Files
+*.log
+
+# Android Studio generated files and folders
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+output.json
+
+# IntelliJ
+*.iml
+.idea/
+misc.xml
+deploymentTargetDropDown.xml
+render.experimental.xml
 
 # Keystore files
 *.jks
 *.keystore
 
-# Release APK files (should be uploaded via GitHub Releases)
-app/release/
-*.apk
+# Google Services (e.g. APIs or Firebase)
+google-services.json
 
-# Kotlin build cache
-.kotlin/
+# Android Profiling
+*.hprof
+
+# Vscode
+.vscode/
