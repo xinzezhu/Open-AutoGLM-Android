@@ -34,13 +34,27 @@ Download the APK file from the Releases page and install it on your Android devi
 
 ### 2. Configure API
 
-1. Open the app and go to the "Settings" page
+The app comes with two pre-configured models that are automatically added to the model configuration list on first launch:
+
+#### Option 1: Zhipu AutoGLM (Recommended)
+1. Open the app, go to "Settings" page, and click "Model Configuration"
 2. Apply for an API Key on Zhipu AI platform (visit https://open.bigmodel.cn/)
-3. Fill in the following information:
+3. Select "智谱 AutoGLM" configuration and edit:
    - **API Key**: Your Zhipu AI API Key
-   - **Base URL**: Default is `https://open.bigmodel.cn/api/paas/v4`
-   - **Model Name**: Default is `autoglm-phone`
-4. Click "Save Settings"
+   - **Base URL**: `https://open.bigmodel.cn/api/paas/v4` (pre-configured)
+   - **Model Name**: `autoglm-phone` (pre-configured)
+4. Click "Save"
+
+#### Option 2: Alibaba Cloud Bailian GUI-plus
+1. Open the app, go to "Settings" page, and click "Model Configuration"
+2. Apply for an API Key on Alibaba Cloud Bailian platform (visit https://bailian.console.aliyun.com/)
+3. Select "阿里云百炼 GUI-plus" configuration and edit:
+   - **API Key**: Your Alibaba Cloud DashScope API Key
+   - **Base URL**: `https://dashscope.aliyuncs.com/compatible-mode/v1` (pre-configured)
+   - **Model Name**: `gui-plus` (pre-configured)
+4. Click "Save"
+
+**Note**: Both models support vision understanding and mobile automation. You can choose either based on your needs.
 
 ### 3. Enable Accessibility Service
 

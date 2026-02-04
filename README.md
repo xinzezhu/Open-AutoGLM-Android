@@ -34,13 +34,27 @@
 
 ### 2. 配置 API
 
-1. 打开应用，进入"设置"页面
+应用内置了两种预配置模型，首次启动时会自动添加到模型配置列表：
+
+#### 选项 1：智谱 AutoGLM（推荐）
+1. 打开应用，进入"设置"页面，点击"模型配置"
 2. 在智谱平台申请 API Key（访问 https://open.bigmodel.cn/）
-3. 填写以下信息：
+3. 选择"智谱 AutoGLM"配置并编辑：
    - **API Key**：您的智谱 API Key
-   - **Base URL**：默认为 `https://open.bigmodel.cn/api/paas/v4`
-   - **Model Name**：默认为 `autoglm-phone`
-4. 点击"保存设置"
+   - **Base URL**：`https://open.bigmodel.cn/api/paas/v4`（已预设）
+   - **Model Name**：`autoglm-phone`（已预设）
+4. 点击"保存"
+
+#### 选项 2：阿里云百炼 GUI-plus
+1. 打开应用，进入"设置"页面，点击"模型配置"
+2. 在阿里云百炼平台申请 API Key（访问 https://bailian.console.aliyun.com/）
+3. 选择"阿里云百炼 GUI-plus"配置并编辑：
+   - **API Key**：您的阿里云 DashScope API Key
+   - **Base URL**：`https://dashscope.aliyuncs.com/compatible-mode/v1`（已预设）
+   - **Model Name**：`gui-plus`（已预设）
+4. 点击"保存"
+
+**注意**：两个模型都支持视觉理解和手机操作自动化，您可以根据自己的需求选择使用。
 
 ### 3. 启用无障碍服务
 
