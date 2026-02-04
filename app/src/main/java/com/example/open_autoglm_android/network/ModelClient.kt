@@ -41,6 +41,7 @@ class ModelClient(
     private val apiKey: String
 ) {
     private val api: AutoGLMApi
+    private val baseUrl: String = baseUrl  // 保存 baseUrl 用于判断提供商
     
     init {
         // 配置 HTTP 日志拦截器，用于调试
@@ -67,11 +68,15 @@ class ModelClient(
         // 验证并修复URL格式
         val validatedBaseUrl = validateAndFixUrl(baseUrl)
         
-        // 构建 Retrofit 实例，使用 Gson 转换器
+        // 配置 Gson，默认不序列化 null 值（这对于阿里云等不支持某些参数的 API 很重要）
+        val gson = com.google.gson.GsonBuilder()
+            .create()
+        
+        // 构建 Retrofit 实例，使用配置好的 Gson 转换器
         val retrofit = Retrofit.Builder()
             .baseUrl(validatedBaseUrl.ensureTrailingSlash())
             .client(client)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
         
         api = retrofit.create(AutoGLMApi::class.java)
@@ -90,9 +95,21 @@ class ModelClient(
     }
     
     /**
+     * 判断是否为阿里云百炼 API
+     * 通过检查 baseUrl 是否包含 dashscope.aliyuncs.com 来判断
+     */
+    private fun isAliyunProvider(): Boolean {
+        return baseUrl.contains("dashscope.aliyuncs.com", ignoreCase = true)
+    }
+    
+    /**
      * 请求模型进行推理（使用消息上下文）
      * 
      * 此方法向配置的 AI 模型发送推理请求，支持智谱 AutoGLM、阿里云百炼 GUI-plus 等多模态模型。
+     * 
+     * **重要说明**：不同模型提供商支持的参数有所不同：
+     * - 智谱 AutoGLM：支持 frequency_penalty 参数
+     * - 阿里云百炼：不支持 frequency_penalty 参数，使用该参数会导致 4000 错误
      * 
      * @param messages 消息列表，包含系统提示、用户输入（文本+截图）、历史对话等
      * @param modelName 模型名称，如 "autoglm-phone"、"gui-plus" 等
@@ -102,16 +119,31 @@ class ModelClient(
         messages: List<ChatMessage>,
         modelName: String
     ): ModelResponse {
-        // 构建符合 OpenAI 格式的请求体
-        val request = ChatRequest(
-            model = modelName,
-            messages = messages,
-            maxTokens = 3000,  // 最大生成 token 数量
-            temperature = 0.0,  // 温度设为 0，确保输出稳定性
-            topP = 0.85,  // Top-p 采样参数
-            frequencyPenalty = 0.2,  // 频率惩罚，减少重复内容
-            stream = false  // 不使用流式输出
-        )
+        // 根据提供商构建符合要求的请求体
+        // 阿里云百炼不支持 frequency_penalty 参数，需要特殊处理
+        val request = if (isAliyunProvider()) {
+            // 阿里云百炼 API：不包含 frequency_penalty 参数
+            ChatRequest(
+                model = modelName,
+                messages = messages,
+                maxTokens = 3000,  // 最大生成 token 数量
+                temperature = 0.0,  // 温度设为 0，确保输出稳定性
+                topP = 0.85,  // Top-p 采样参数
+                frequencyPenalty = null,  // 阿里云不支持此参数，设为 null
+                stream = false  // 不使用流式输出
+            )
+        } else {
+            // 其他提供商（如智谱 AutoGLM）：包含完整参数
+            ChatRequest(
+                model = modelName,
+                messages = messages,
+                maxTokens = 3000,  // 最大生成 token 数量
+                temperature = 0.0,  // 温度设为 0，确保输出稳定性
+                topP = 0.85,  // Top-p 采样参数
+                frequencyPenalty = 0.2,  // 频率惩罚，减少重复内容
+                stream = false  // 不使用流式输出
+            )
+        }
         
         // 发送 HTTP 请求到模型 API
         val response = api.chatCompletion(request)
