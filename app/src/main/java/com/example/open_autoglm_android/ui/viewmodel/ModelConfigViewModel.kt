@@ -8,6 +8,7 @@ import com.example.open_autoglm_android.data.database.ModelConfig
 import com.example.open_autoglm_android.data.database.ModelConfigRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -30,8 +31,44 @@ class ModelConfigViewModel(application: Application) : AndroidViewModel(applicat
     val uiState = _uiState.asStateFlow()
 
     init {
+        // 初始化默认模型配置
+        initializeDefaultModels()
         // 加载所有模型配置
         loadModelConfigs()
+    }
+    
+    /**
+     * 初始化默认模型配置
+     * 在首次启动时，添加预置的模型配置供用户使用
+     */
+    private fun initializeDefaultModels() {
+        viewModelScope.launch {
+            // 使用 first() 只获取一次当前的模型列表，而不是持续监听
+            val existingModels = modelConfigRepository.allModelConfigs.first()
+            if (existingModels.isEmpty()) {
+                // 添加智谱 AutoGLM 模型配置
+                modelConfigRepository.insertModelConfig(
+                    ModelConfig(
+                        name = "智谱 AutoGLM",
+                        apiKey = "",
+                        baseUrl = "https://open.bigmodel.cn/api/paas/v4",
+                        modelName = "autoglm-phone",
+                        isSelected = false
+                    )
+                )
+                
+                // 添加阿里云百炼 GUI-plus 模型配置
+                modelConfigRepository.insertModelConfig(
+                    ModelConfig(
+                        name = "阿里云百炼 GUI-plus",
+                        apiKey = "",
+                        baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                        modelName = "gui-plus",
+                        isSelected = false
+                    )
+                )
+            }
+        }
     }
 
     /**
