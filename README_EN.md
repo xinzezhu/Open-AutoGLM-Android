@@ -116,7 +116,19 @@ A: Possible reasons:
 - API Key configuration is incorrect
 - Network connection issues
 - Task description is not clear enough
- - The system's battery optimization for this app is not set to "Unrestricted", causing background tasks to be killed
+- The system's battery optimization for this app is not set to "Unrestricted", causing background tasks to be killed
+
+### Q: Getting 4000 error when using Alibaba Cloud GUI-plus model?
+
+A: This issue has been fixed in the latest version. The 4000 error is typically caused by invalid request parameters:
+- **Problem**: Alibaba Cloud Bailian API doesn't support the `frequency_penalty` parameter
+- **Solution**: The app automatically detects the model provider and removes unsupported parameters for Alibaba Cloud API
+- **Verification**: Please ensure you're using the latest version of the app; older versions may encounter this issue
+
+If you still get a 4000 error, please check:
+1. API Key is correct and valid
+2. Model name is correct (should be "gui-plus")
+3. Base URL is correctly configured as `https://dashscope.aliyuncs.com/compatible-mode/v1`
 
 ### Q: How can I view the AI's thinking process?
 
