@@ -30,8 +30,48 @@ class ModelConfigViewModel(application: Application) : AndroidViewModel(applicat
     val uiState = _uiState.asStateFlow()
 
     init {
+        // 初始化默认模型配置
+        initializeDefaultModels()
         // 加载所有模型配置
         loadModelConfigs()
+    }
+    
+    /**
+     * 初始化默认模型配置
+     * 在首次启动时，添加预置的模型配置供用户使用
+     */
+    private fun initializeDefaultModels() {
+        viewModelScope.launch {
+            // 检查数据库是否为空，如果为空则添加默认模型
+            val existingModels = modelConfigRepository.allModelConfigs
+            existingModels.collect { models ->
+                if (models.isEmpty()) {
+                    // 添加智谱 AutoGLM 模型配置
+                    modelConfigRepository.insertModelConfig(
+                        ModelConfig(
+                            name = "智谱 AutoGLM",
+                            apiKey = "",
+                            baseUrl = "https://open.bigmodel.cn/api/paas/v4",
+                            modelName = "autoglm-phone",
+                            isSelected = false
+                        )
+                    )
+                    
+                    // 添加阿里云百炼 GUI-plus 模型配置
+                    modelConfigRepository.insertModelConfig(
+                        ModelConfig(
+                            name = "阿里云百炼 GUI-plus",
+                            apiKey = "",
+                            baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                            modelName = "gui-plus",
+                            isSelected = false
+                        )
+                    )
+                }
+                // 只检查一次，然后退出Flow收集
+                return@collect
+            }
+        }
     }
 
     /**
