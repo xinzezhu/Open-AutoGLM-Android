@@ -8,6 +8,7 @@ import com.example.open_autoglm_android.data.database.ModelConfig
 import com.example.open_autoglm_android.data.database.ModelConfigRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -42,34 +43,30 @@ class ModelConfigViewModel(application: Application) : AndroidViewModel(applicat
      */
     private fun initializeDefaultModels() {
         viewModelScope.launch {
-            // 检查数据库是否为空，如果为空则添加默认模型
-            val existingModels = modelConfigRepository.allModelConfigs
-            existingModels.collect { models ->
-                if (models.isEmpty()) {
-                    // 添加智谱 AutoGLM 模型配置
-                    modelConfigRepository.insertModelConfig(
-                        ModelConfig(
-                            name = "智谱 AutoGLM",
-                            apiKey = "",
-                            baseUrl = "https://open.bigmodel.cn/api/paas/v4",
-                            modelName = "autoglm-phone",
-                            isSelected = false
-                        )
+            // 使用 first() 只获取一次当前的模型列表，而不是持续监听
+            val existingModels = modelConfigRepository.allModelConfigs.first()
+            if (existingModels.isEmpty()) {
+                // 添加智谱 AutoGLM 模型配置
+                modelConfigRepository.insertModelConfig(
+                    ModelConfig(
+                        name = "智谱 AutoGLM",
+                        apiKey = "",
+                        baseUrl = "https://open.bigmodel.cn/api/paas/v4",
+                        modelName = "autoglm-phone",
+                        isSelected = false
                     )
-                    
-                    // 添加阿里云百炼 GUI-plus 模型配置
-                    modelConfigRepository.insertModelConfig(
-                        ModelConfig(
-                            name = "阿里云百炼 GUI-plus",
-                            apiKey = "",
-                            baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                            modelName = "gui-plus",
-                            isSelected = false
-                        )
+                )
+                
+                // 添加阿里云百炼 GUI-plus 模型配置
+                modelConfigRepository.insertModelConfig(
+                    ModelConfig(
+                        name = "阿里云百炼 GUI-plus",
+                        apiKey = "",
+                        baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                        modelName = "gui-plus",
+                        isSelected = false
                     )
-                }
-                // 只检查一次，然后退出Flow收集
-                return@collect
+                )
             }
         }
     }
