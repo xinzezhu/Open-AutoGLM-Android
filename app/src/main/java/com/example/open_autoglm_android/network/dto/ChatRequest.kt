@@ -27,7 +27,7 @@ data class ChatRequest(
     @SerializedName("top_p")
     val topP: Double = 0.85,
     @SerializedName("frequency_penalty")
-    val frequencyPenalty: Double = 0.2,
+    val frequencyPenalty: Double? = null,  // 设为可空，以支持不同的模型提供商
     val stream: Boolean = false,
     @SerializedName("extra_body")
     val extraBody: Map<String, Any>? = null

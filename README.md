@@ -34,13 +34,27 @@
 
 ### 2. 配置 API
 
-1. 打开应用，进入"设置"页面
+应用内置了两种预配置模型，首次启动时会自动添加到模型配置列表：
+
+#### 选项 1：智谱 AutoGLM（推荐）
+1. 打开应用，进入"设置"页面，点击"模型配置"
 2. 在智谱平台申请 API Key（访问 https://open.bigmodel.cn/）
-3. 填写以下信息：
+3. 选择"智谱 AutoGLM"配置并编辑：
    - **API Key**：您的智谱 API Key
-   - **Base URL**：默认为 `https://open.bigmodel.cn/api/paas/v4`
-   - **Model Name**：默认为 `autoglm-phone`
-4. 点击"保存设置"
+   - **Base URL**：`https://open.bigmodel.cn/api/paas/v4`（已预设）
+   - **Model Name**：`autoglm-phone`（已预设）
+4. 点击"保存"
+
+#### 选项 2：阿里云百炼 GUI-plus
+1. 打开应用，进入"设置"页面，点击"模型配置"
+2. 在阿里云百炼平台申请 API Key（访问 https://bailian.console.aliyun.com/）
+3. 选择"阿里云百炼 GUI-plus"配置并编辑：
+   - **API Key**：您的阿里云 DashScope API Key
+   - **Base URL**：`https://dashscope.aliyuncs.com/compatible-mode/v1`（已预设）
+   - **Model Name**：`gui-plus`（已预设）
+4. 点击"保存"
+
+**注意**：两个模型都支持视觉理解和手机操作自动化，您可以根据自己的需求选择使用。
 
 ### 3. 启用无障碍服务
 
@@ -102,7 +116,19 @@ A: 可能的原因：
 - API Key 配置错误
 - 网络连接问题
 - 任务描述不够清晰
- - 系统对本应用的电量/电池策略未设置为「无限制」，导致后台执行时被系统杀死
+- 系统对本应用的电量/电池策略未设置为「无限制」，导致后台执行时被系统杀死
+
+### Q: 阿里云 GUI-plus 模型返回 4000 错误怎么办？
+
+A: 这个问题已在最新版本中修复。4000 错误通常是由于请求参数不合法导致的。具体原因：
+- **问题**：阿里云百炼 API 不支持 `frequency_penalty` 参数
+- **解决**：应用会自动检测使用的模型提供商，对阿里云 API 自动移除不支持的参数
+- **确认**：请确保使用最新版本的应用，旧版本可能会遇到此问题
+
+如果仍然遇到 4000 错误，请检查：
+1. API Key 是否正确且有效
+2. 模型名称是否正确（应为 "gui-plus"）
+3. Base URL 是否正确配置为 `https://dashscope.aliyuncs.com/compatible-mode/v1`
 
 ### Q: 如何查看 AI 的思考过程？
 
